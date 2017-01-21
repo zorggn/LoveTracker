@@ -633,15 +633,18 @@ function load_s3m(file)
 			local len = structure.instruments[i].smpLen > 0 and structure.instruments[i].smpLen or 1 -- merp
 			structure.instruments[i]._data = love.sound.newSoundData(structure.instruments[i].smpLen, 44100, 8, 1)
 
+			-- Faster to process inside RAM than to read in from disk byte-by-byte.
+			local buffer = file:read(len)
+
 			-- Fill up sounddata with samplepoint values.
 			for j = 0, structure.instruments[i].smpLen-1 do
 				if smpf == 2 then
 					-- Unsigned
-					local x = util.ansi2number(file:read(1))
+					local x = util.ansi2number(buffer:sub[j,j])
 					structure.instruments[i]._data:setSample(j, (x-128)/256) -- normalize to [-1,1]
 				elseif smpf == 1 then
 					-- Signed -> convert to unsigned (x>127&-(256-x)|x)
-					local x = util.ansi2number(file:read(1))
+					local x = util.ansi2number(buffer:sub[j,j])
 					x = x > 127 and -(256-x) or x
 					structure.instruments[i]._data:setSample(j, (x/128)) -- normalize to [-1,1]
 				end
