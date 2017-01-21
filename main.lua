@@ -69,6 +69,28 @@ end
 
 -------------------------------------------------------------------------------
 
+local loader = require "loader"
+
+function love.filedropped(file)
+	-- Stop playback
+	-- Unload previous data
+	-- Use the loader to detect and load in the module file.
+	-- Init playroutine with one fitting the module.
+
+	module = loader(file)
+end
+
+
+
+
+
+
+
+
+
+
+
+
 local threadData = 'thread.lua'
 local ti, to
 local thread
@@ -76,16 +98,16 @@ local thread
 local sd
 
 love.load = function(args)
-	thread = love.thread.newThread(threadData)
-	ti, to = love.thread.newChannel(), love.thread.newChannel()
+	--thread = love.thread.newThread(threadData)
+	--ti, to = love.thread.newChannel(), love.thread.newChannel()
 
-	sd = love.sound.newSoundData(1024, 44100, 16, 1) -- buffsize,smplrate,bitdepth,channels
+	--sd = love.sound.newSoundData(1024, 44100, 16, 1) -- buffsize,smplrate,bitdepth,channels
 
-	thread:start(ti,to,sd)
+	--thread:start(ti,to,sd)
 end
 
 love.update = function(dt)
-	if not thread:isRunning() then
-		print(thread:getError())
-	end
+	--if not thread:isRunning() then
+		--print(thread:getError())
+	--end
 end
