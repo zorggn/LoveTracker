@@ -22,6 +22,37 @@ local util = require('util')
 	                      -- as such)
 	bool   - defaultPan   -- If true, panning values are stored, else they aren't. (which means what, exactly?
 	                      -- center if false?)
+	n : n  - channelMap   -- Correlates absolute channel ordinals with relative indices.
+	                      -- (map[in-tracker index] -> file ch pos.)
+	n : n  - channelPan   -- Uses same relative indices as above but stores 'L' or 'R' as panning values...
+	                      -- probably amiga limits.
+	number - chnNum       -- Number of actually used channels. (0-based)
+	n : n  - orders       -- Array holding the order data.
+	number - patNum       -- Number of distinct patterns. (0-based)
+
+	instruments  -- Array holding instrument data
+			type          -- 1 then sampler, 0 then empty, else OPL2.
+			filename      -- DOS filename of sample.
+			memPos        -- Position of the actual sample data in the file. (need to be multiplied by 16 first)
+			smpLen        -- Length of the actual sample data.
+			smpLoopStart  -- .
+			smpLoopEnd    -- .
+			volume        -- Sample volume.
+			packingScheme -- Usually 0 for unpacked, can be 1 for DP30 ADPCM encoded...
+			looping       -- If true, the sample loops.
+			c4speed       -- "Base" playback rate of the sample.
+			name          -- The sample name.
+			data          -- Loaded samplepoints, the sample proper.
+
+	patterns     -- Array holding pattern data.
+			row            -- Holds column data from one row.
+				channel       -- Holds cell data from one column. (and row)
+					note         -- false, '^^', or numeric (12*15 possible values for 12 notes and 15 octaves...)
+					instrument   -- Number.
+					volumecmd    -- Volume column value.
+					effectcmd    -- Effect column command.
+					effectprm    -- Effect column parameter.
+
 --]]
 
 local printp_s3m = function(row, nchan)
