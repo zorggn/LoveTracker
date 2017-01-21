@@ -6,7 +6,7 @@
     t.externalstorage = false           -- True to save files (and read from the save directory) in external storage on Android (boolean) 
     t.gammacorrect = true              -- Enable gamma-correct rendering, when supported by the system (boolean)
  
-    t.window.title = "MOD Player"         -- The window title (string)
+    t.window.title = "LöveTracker"         -- The window title (string)
     t.window.icon = nil                 -- Filepath to an image to use as the window's icon (string)
     t.window.width = 1280                -- The window width (number)
     t.window.height = 1024               -- The window height (number)
