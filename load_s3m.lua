@@ -641,11 +641,11 @@ function load_s3m(file)
 			for j = 0, structure.instruments[i].smpLen-1 do
 				if smpf == 2 then
 					-- Unsigned
-					local x = util.ansi2number(buffer:sub[j,j])
+					local x = util.ansi2number(buffer:sub(j,j))
 					structure.instruments[i]._data:setSample(j, (x-128)/256) -- normalize to [-1,1]
 				elseif smpf == 1 then
 					-- Signed -> convert to unsigned (x>127&-(256-x)|x)
-					local x = util.ansi2number(buffer:sub[j,j])
+					local x = util.ansi2number(buffer:sub(j,j))
 					x = x > 127 and -(256-x) or x
 					structure.instruments[i]._data:setSample(j, (x/128)) -- normalize to [-1,1]
 				end
