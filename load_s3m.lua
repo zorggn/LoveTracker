@@ -9,6 +9,7 @@ local util = require('util')
 	string - fileType     -- The extension of the module. (Added in loader.lua)
 	string - moduleType   -- What tracker was the possible culprit that created this module;
 	                      -- For s3m files, it'll always be "Scream Tracker 3", appended by a version number.
+
 	string - title        -- Title of the module. (27 or 28 characters maximum)
 	number - ordNum       -- Number of pattern orders. (0-based) 
 	number - insNum       -- Number of instruments. (Samplers or AdLib OPL2 synth patches) (0-based)
