@@ -21,6 +21,7 @@ local load_module = function(file)
 	-- Separate path, name, extension from filename; though it may be path, extension, name instead (amiga).
 	local _, antePunct, postPunct = file:getFilename():match("(.-)([^\\/]-%.?([^%.\\/]*))$")
 	antePunct = antePunct:match("(.+)%..*")
+	-- Fix case.
 	antePunct, postPunct = string.lower(antePunct), string.lower(postPunct)
 
 	log("Path: '%s' Former half: '%s' Latter half: '%s'", _, antePunct, postPunct)
