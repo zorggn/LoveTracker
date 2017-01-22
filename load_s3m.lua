@@ -572,7 +572,7 @@ function load_s3m(file)
 								row[structure.channelMap[ch]].note = bit.rshift(note,4)*12 +
 									bit.band(note, 0xF)
 							end
-							row[structure.channelMap[ch]].instrument = inst -- number, simple.
+							row[structure.channelMap[ch]].instrument = inst ~= 0 and inst or false  -- ...
 						end
 					else
 						-- No data
