@@ -10,7 +10,7 @@ love.run = function()
 
 	local dt = 0.0    -- delta time
  
-	local tr = 1/100  -- tick rate
+	local tr = 1/60  -- tick rate
 	local fr = 1/60   -- frame rate
 
 	local da = 0.0    -- draw accumulator
@@ -67,47 +67,58 @@ love.run = function()
 	end
 end
 
+local log = function(str,...) print(string.format(str,...)) end
+
 -------------------------------------------------------------------------------
 
 local loader = require "loader"
 
-function love.filedropped(file)
-	-- Stop playback
-	-- Unload previous data
-	-- Use the loader to detect and load in the module file.
-	-- Init playroutine with one fitting the module.
+local module
+local routine
 
+function love.filedropped(file)
+
+	-- Stop playback; Unload previous data.
+	if routine and routine.playing then
+		love.audio.stop()
+		routine = nil 
+	end
+	if module then
+		module = nil
+	end
+
+	-- Use the loader to detect and load in the module file.
 	module = loader(file)
+
+	-- Init playroutine with one fitting the module.
+	routine = require("playroutine_" .. module.fileType)
+
+	-- Play the module.
+	routine.init(module)
 end
 
+-------------------------------------------------------------------------------
 
 
-
-
-
-
-
-
-
-
-
-local threadData = 'thread.lua'
-local ti, to
-local thread
-
-local sd
 
 love.load = function(args)
-	--thread = love.thread.newThread(threadData)
-	--ti, to = love.thread.newChannel(), love.thread.newChannel()
 
-	--sd = love.sound.newSoundData(1024, 44100, 16, 1) -- buffsize,smplrate,bitdepth,channels
+	love.graphics.setFont(love.graphics.newFont('FSEX300.ttf', 16))
 
-	--thread:start(ti,to,sd)
+end
+
+love.atomic = function()
+	
 end
 
 love.update = function(dt)
-	--if not thread:isRunning() then
-		--print(thread:getError())
-	--end
+	if routine then
+		routine.process()
+	end
+end
+
+love.draw = function()
+	if routine then
+		routine.draw()
+	end
 end
