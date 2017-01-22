@@ -619,7 +619,7 @@ function load_s3m(file)
 			pattern[j] = row
 
 			-- This is for show.
-			printp_s3m(row, structure.chnNum)
+			printp_s3m(row, structure.chnNum, true)
 
 		end -- rows
 
@@ -674,6 +674,9 @@ function load_s3m(file)
 
 	-- Only one type possible, so no heuristics needed; do append the version though.
 	structure.moduleType = 'Scream Tracker 3 (v' .. structure.version .. ')'
+
+	-- Expose row printing function
+	structure.printRow = printp_s3m
 
 	-- We're done! no lie! \o/                          ...yes lie, no AdLib OPL2 support for now.
 	return structure
