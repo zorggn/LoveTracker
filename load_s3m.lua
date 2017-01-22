@@ -56,7 +56,8 @@ local util = require('util')
 
 --]]
 
-local printp_s3m = function(row, nchan)
+-- Expose this inside the structure...
+local printp_s3m = function(row, nchan, console)
 
 	local NOTE = {[0] = 'C-', 'C#', 'D-', 'D#', 'E-', 'F-', 'F#', 'G-', 'G#', 'A-', 'A#', 'B-'}
 
@@ -106,7 +107,12 @@ local printp_s3m = function(row, nchan)
 			end
 		end
 		table.insert(vis, '|')
-		log(table.concat(vis))
+
+		if console then
+			log(table.concat(vis))
+		else
+			return table.concat(vis)
+		end
 	else
 		-- visualize an empty row
 		local vis = {}
@@ -115,7 +121,12 @@ local printp_s3m = function(row, nchan)
 				table.insert(vis, '... .. .. ...')
 			end
 			table.insert(vis,'|')
-		log(table.concat(vis))
+
+		if console then
+			log(table.concat(vis))
+		else
+			return table.concat(vis)
+		end
 	end
 end
 
