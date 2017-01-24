@@ -94,12 +94,12 @@ function love.filedropped(file)
 	routine = require("playroutine_" .. module.fileType)
 
 	-- Play the module.
-	routine.init(module)
+	-- routine.init(module)
 end
 
 -------------------------------------------------------------------------------
 
-
+local samplesToMix, playbackPosition, bufferTime, cpuTime, samplingPeriod, tickPeriod = 0,0,0,0,0,0
 
 love.load = function(args)
 
@@ -107,18 +107,54 @@ love.load = function(args)
 
 end
 
-love.atomic = function()
+love.atomic = function(dt)
 	
 end
 
 love.update = function(dt)
 	if routine then
-		routine.process()
+		samplesToMix, playbackPosition, bufferTime, cpuTime, samplingPeriod, tickPeriod = routine(dt)
 	end
 end
 
 love.draw = function()
-	if routine then
-		routine.draw()
+	love.graphics.setColor(1,1,1)
+	love.graphics.print(("Samples mixed:       %d smps"):format(samplesToMix), 0, 0)
+	love.graphics.print(("Playback position:   %d ticks"):format(playbackPosition), 0, 12)
+	love.graphics.print(("Time (Buffer-based): %g seconds"):format(bufferTime), 0, 24)
+	love.graphics.print(("Time (Timer-based):  %g seconds"):format(cpuTime), 0, 36)
+	love.graphics.print(("Sampling period:     %g ms"):format(samplingPeriod*1000), 0, 48)
+	love.graphics.print(("Tick period:         %g ms"):format(tickPeriod*1000), 0, 60)
+
+	if module then
+
+	-- Position is in ticks, so we just improvise by treating all rows having 6 ticks, and all patterns having 64 rows.
+		local currentOrder   = math.floor((playbackPosition/6/64) % #module.orders) -- number
+		local currentPattern = module.orders[currentOrder] -- number
+		local currentRow     = math.floor((playbackPosition/6)%64) -- number
+		local currentTick    = math.floor(playbackPosition%6) -- number
+
+		if not module.patterns[currentPattern] then return end
+		for i=0, #module.patterns[currentPattern] do
+			if i ~= currentRow then
+				love.graphics.setColor(0.5,0.5,0.5)
+			else
+				if     currentTick == 0 then
+					love.graphics.setColor(1.0,0.0,0.0)
+				elseif currentTick == 1 then
+					love.graphics.setColor(1.0,1.0,0.0)
+				elseif currentTick == 2 then
+					love.graphics.setColor(0.0,1.0,0.0)
+				elseif currentTick == 3 then
+					love.graphics.setColor(0.0,1.0,1.0)
+				elseif currentTick == 4 then
+					love.graphics.setColor(0.0,0.0,1.0)
+				elseif currentTick == 5 then
+					love.graphics.setColor(1.0,0.0,1.0)
+				end
+			end
+			love.graphics.print(("%02d"):format(i), 0, i*12)
+			love.graphics.print(module.printRow(module.patterns[currentPattern][i], module.chnNum),12,i*12)
+		end
 	end
 end
