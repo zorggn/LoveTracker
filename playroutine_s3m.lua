@@ -139,6 +139,10 @@ routine.load = function(mod)
 		voices[i] = newVoice()
 	end
 
+	-- Step the timer since startup may spike the dt, which
+	-- is bad news for any time-sensitive code.
+	love.timer.step()
+
 end
 
 routine.update = function(dt)
@@ -313,6 +317,7 @@ routine.update = function(dt)
 	end
 
 	-- Render samplepoint(s); count based on elapsed CPU time.
+	-- Technically this isn't the best thing to do, but whatever.
 	-- Code doesn't deal with stereo, for now.
 	local samplesToMix = math.ceil(dt / samplingPeriod)
 	for i=0, samplesToMix do
