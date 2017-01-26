@@ -146,7 +146,6 @@ routine.load = function(mod)
 end
 
 routine.update = function(dt)
-	dt = math.min(dt, 1/60)
 
 	-- This always happens with the function call.
 	cpuTime = cpuTime + dt
