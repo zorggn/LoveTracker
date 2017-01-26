@@ -64,9 +64,9 @@ local qSource      = love.audio.newQueueableSource(samplingRate, bitDepth, chann
 
 -- Global Parameters
 
-local tempo                                  -- beats per minute
-local speed                                  -- ticks per row
-local timeSigNumer   =   4                   -- rows per beat
+local tempo                                  -- beats per minute (Factor, not actual BPM!)
+local speed                                  -- ticks per row (Divisor)
+local timeSigNumer   =   4                   -- rows per beat (For actual BPM calculation)
 local timeSigDenom   =   4                   -- row type (note lengths, for "midi")
 
 -- Calculated Parameters
@@ -74,6 +74,7 @@ local timeSigDenom   =   4                   -- row type (note lengths, for "mid
 local midiPPQ                                -- pulse per quarternote
 local samplingPeriod = 1 / samplingRate      -- seconds (per smp)
 local tickPeriod                             -- seconds (per tick)
+local actualBPM                              -- beats per minute (This one is the real deal.)
 
 local restartOrder   = 0
 local globalVolume   = 1.0
@@ -107,7 +108,8 @@ local currentTick
 
 local fixTiming = function()
 	midiPPQ        = speed * timeSigNumer * (4 / timeSigDenom)
-	tickPeriod     = (60) / ( tempo * timeSigNumer * (36/speed))
+	tickPeriod     = 2.5 / tempo
+	actualBPM      = (60) / (tickPeriod * midiPPQ)
 end
 
 math.clamp = function(x,min,max)
@@ -348,6 +350,7 @@ routine.draw = function()
 	love.graphics.print(("Time (Timer-based):  %5.5g"):format(cpuTime),          0, 36)
 	love.graphics.print(("Sampling period:     %g"):format(samplingPeriod*1000), 0, 48)
 	love.graphics.print(("Tick period:         %g"):format(tickPeriod*1000),     0, 60)
+	love.graphics.print(("Actual Tempo:        %g"):format(actualBPM),           0, 72)
 
 	love.graphics.print("smps",    32*8, 0)
 	love.graphics.print("ticks",   32*8, 12)
@@ -355,6 +358,7 @@ routine.draw = function()
 	love.graphics.print("seconds", 32*8, 36)
 	love.graphics.print("ms",      32*8, 48)
 	love.graphics.print("ms",      32*8, 60)
+	love.graphics.print("BPM",     32*8, 72)
 
 	if module then
 
@@ -364,6 +368,12 @@ routine.draw = function()
 		love.graphics.print(("Tick:    %d"):format(currentTick),    42*8, 36)
 		love.graphics.print(("Speed:   %d"):format(speed),          42*8, 48)
 		love.graphics.print(("Tempo:   %d"):format(tempo),          42*8, 60)
+		love.graphics.print(("Timing:  %s"):format(trackingMode),   42*8, 72)
+
+		love.graphics.print(("/ %d"):format(#module.orders),                   56*8, 0)
+		love.graphics.print(("/ %d"):format(#module.patterns),                 56*8, 12)
+		love.graphics.print(("/ %d"):format(#module.patterns[currentPattern]), 56*8, 24)
+		love.graphics.print(("/ %d"):format(speed-1),                          56*8, 36)
 
 		if not module.patterns[currentPattern] then return end
 		for i=0, #module.patterns[currentPattern] do
@@ -376,8 +386,8 @@ routine.draw = function()
 					love.graphics.setColor(0.75,0.75,0.25)
 				end
 			end
-			love.graphics.print(("%02d"):format(i), 0, 72+i*12)
-			love.graphics.print(module.printRow(module.patterns[currentPattern][i], module.chnNum),14,72+i*12)
+			love.graphics.print(("%02d"):format(i), 0, 84+i*12)
+			love.graphics.print(module.printRow(module.patterns[currentPattern][i], module.chnNum),14,84+i*12)
 		end
 	end
 end
