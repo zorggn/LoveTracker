@@ -1,0 +1,73 @@
+-- Tracker module playback timing based on variable tick duration.
+-- This reference/implementation/code-chunks by zorg @ 2017 § Pub.Dom. or equivalently CC0.
+
+-- References:
+-- - https://modarchive.org/forums/index.php?topic=2709.0
+-- - Literally all the spec docs floating on the net, that have paragraphs dealing with this.
+
+-- Note that this might not be "100% correct" either, but at least with the PAL timer below, it is.
+
+-- Amiga timers
+Timers = {PAL = 50, NTSC = 60}
+Timer = 'PAL'
+
+-- Tick Divisor, since 1 tick/row on a PAL Amiga would mean 3000 rows/second.
+Speed = 6
+
+-- Tick Factor, hard-defined as 125 (for PAL, or either 150 or 120 on NTSC) for VBlank-based timing,
+-- CIA timer based timing lets us set this.
+Tempo = 125 -- "BPM", but not really; see below. ([time]^-2, or Hz/s)
+
+-- These are for convenience only, and really, of these two, only the numerator is needed to
+-- calculate the true Tempo of a module.
+TimeSigNumer = 4 -- rows per beat
+TimeSigDenom = 4 -- beat units
+
+-- This is the only line needed to calculate the actual playback timing.
+-- 125 "BPM" * 2 => 250 / 5 => 50 Hz -> PAL CRT VBlank Speed.
+-- So from "tempo" to tick period:
+-- (5/2) / 125 => 2.5 / 125 => 0.02 sec * 1000 => 20 ms
+-- In reverse:
+-- 20 ms / 1000 => 0.02 seconds; ((50 Hz / 10) / 2) / 0.02 seconds => 125 _Hz/s_
+-- Verify it yourself: http://www.wolframalpha.com/input/?i=((50+Hz+%2F+10)+%2F+2)+%2F+0.02+seconds
+-- Note that in reverse, we're going from milliseconds to seconds, and from there, we go to
+-- frequency drift, apparently; best not to think too hard on this.
+-- Short version of RHS (Using PAL, because all trackers i know use PAL): 2500 / Tempo
+msPerTick = (((Timers[Timer]/10)/2) * 1000) / Tempo -- ms
+
+-- Now that we have the correct timing above, we can calculate the accurate real tempo as well:
+-- TicksPerBeat = Speed     * TimeSigNumer
+-- msPerBeat    = msPerTick * TicksPerBeat
+-- realTempo    = 60 * 1000 / msPerBeat
+realTempo = 60000 / (msPerTick * Speed * TimeSigNumer)
+
+-- That's all for trackers.
+
+
+
+-- ...but if you'd also want to drag MIDI timing into this...
+-- One needs to decide whether pulses are ticks or rows; clearly they should be rows, since
+-- MIDI notes are aligned to pulses...
+-- midiPPQ = Speed * TimeSigNumer
+-- ...then again, 
+
+-- It's not that hard actually, people just might overcomplicate things.
+-- to put it simply, the pulse per quarternote value corresponds to the rows of a pattern.
+
+
+
+-- Oh, also, sample-based (also called sample-accurate) timings... kinda a possibility, but...
+-- msPerSample = 1 / SamplingRate
+-- using even a common rate (as-of-2017) of 44.1kHz, you get ~0.02267 ms, or ~23 microseconds.
+-- (For the purists out there, 48kHz would be ~20 μs, and 192kHz ~5 μs; 8kHz would be ~ 125μs)
+-- My Intel i7 CPU can execute a thread about 1000 cycles per second.
+-- The above would require 44100 cycles, -if- i wanted to see the playlist being tracked (advanced)
+-- by those tiny time-slices each time... not to mention the need to invest in a 44100 FPS monitor.
+-- Joking aside, OBVIOUSLY this is not the point of sample-based timing; but still, even if
+-- we use bigger time-slices for playback tracking (which wouldn't impact the sample-accurate-ness
+-- of it), the real issue is the amount of calculation needed.
+-- With a tick/PPQ-based implementation, you updated values like playing notes, instrument parameter
+-- automation and such each tick, which were about 3 orders of magnitude above the sampling rate
+-- under common circumstances.
+-- 120 BPM ~ 20 ms; 40000 Hz ~ 20 μs; 1 ms = 1000 μs.
+-- 
