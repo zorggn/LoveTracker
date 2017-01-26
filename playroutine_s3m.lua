@@ -249,7 +249,7 @@ routine.update = function(dt)
 				currentTick = currentTick + 1
 			else
 				currentTick = 0
-				print(currentOrder, currentPattern)
+				--print(currentOrder, currentPattern)
 				if currentRow + 1 <= #module.patterns[currentPattern] then
 					currentRow = currentRow + 1
 				else
@@ -267,9 +267,9 @@ routine.update = function(dt)
 			-- Not sure if 255 can appear between legit slots or not, if not, this code
 			-- can be adjusted a bit.
 			if currentPattern >= 254 then
-				print "Found Marker / Empty pattern!"
+				--print "Found Marker / Empty pattern!"
 				for i = currentOrder, #module.orders do
-					print("order ",i,"has pattern ",module.orders[i])
+					--print("order ",i,"has pattern ",module.orders[i])
 					if module.orders[i] < 254 then
 						currentOrder = i
 						currentPattern = module.orders[currentOrder]
