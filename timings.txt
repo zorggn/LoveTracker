@@ -42,6 +42,8 @@ msPerTick = (((Timers[Timer]/10)/2) * 1000) / Tempo -- ms
 realTempo = 60000 / (msPerTick * Speed * TimeSigNumer)
 
 -- That's all for trackers.
+-- ...well, apart from the fact that the reason they use period tables is because they don't do
+-- samplepoint interpolation at all, they jump to the nearest smp based on the stored period values.
 
 
 
