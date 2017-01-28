@@ -655,6 +655,7 @@ function load_s3m(file)
 				if smpf == 2 then
 					-- Unsigned
 					local x = util.ansi2number(buffer:sub(j,j))
+					--print((x-128)/256)
 					structure.instruments[i].data:setSample(j, (x-128)/256) -- normalize to [-1,1]
 				elseif smpf == 1 then
 					-- Signed -> convert to unsigned (x>127&-(256-x)|x)
@@ -664,6 +665,14 @@ function load_s3m(file)
 				end
 			end
 		end
+
+		--[[
+		local temp = love.audio.newSource(structure.instruments[i].data)
+		print(structure.instruments[i].smpLen, 8363 / structure.instruments[i].c4speed)
+		temp:setPitch(8363 / structure.instruments[i].c4speed)
+		temp:play()
+		while temp:isPlaying() do end
+		--]]
 	end
 
 	log("Samples loaded!")
