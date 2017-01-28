@@ -465,7 +465,7 @@ function load_s3m(file)
 			-- 1 looping
 			-- 2 stereo sample (unsupported)
 			-- 4 16bit sample (unsupported)
-			if flags % 1 == 1 then
+			if flags == 1 then
 				instrument.looping = true
 			else
 				instrument.looping = false
