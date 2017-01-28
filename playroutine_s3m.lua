@@ -56,7 +56,6 @@ local voice = {}
 
 voice.setNote = function(v, note)
 	v.notePeriod = notePeriod[note]
-	v._currentOffset = 0.0
 end
 
 voice.setInstrument = function(v, instrument)
@@ -77,12 +76,24 @@ voice.process = function(v)
 	local normalizer = defaultC4speed / module.instruments[v.instrument].c4speed
 	local currPeriod = v.notePeriod * normalizer
 	v._currentOffset = v._currentOffset + (fixedClock / currPeriod)
-	if v._currentOffset > module.instruments[v.instrument].data:getSampleCount() then
-		v._currentOffset = 0.0
-		v.notePeriod = 0
-		return 0
+	if v.sampleOffset > 0 then
+		v._currentOffset = v._currentOffset + v.sampleOffset
+		v.sampleOffset = 0.0
 	end
-	--v._currentOffset = v._currentOffset % module.instruments[v.instrument].data:getSampleCount()
+	if module.instruments[v.instrument].looping then
+		-- loop part between smpLoopStart and smpLoopEnd
+		local addend = v._currentOffset - module.instruments[v.instrument].smpLoopEnd
+		if addend >= 0 then
+			v._currentOffset = module.instruments[v.instrument].smpLoopStart + addend
+		end
+	else
+		if v._currentOffset > module.instruments[v.instrument].data:getSampleCount() then
+			v._currentOffset = 0.0
+			v.notePeriod = 0
+			return 0
+		end
+	end
+	v._currentOffset = v._currentOffset % module.instruments[v.instrument].data:getSampleCount()
 	local smp = module.instruments[v.instrument].data:getSample(math.floor(v._currentOffset)) * v.sampleVolume
 	return smp
 end
@@ -242,28 +253,71 @@ routine.update = function(dt)
 						-- Check for cell components.
 
 						local note       = channel.note
-						if type(note) == 'number' then
-							-- Note pitch.
-							voices[ch]:setNote(note)
-						elseif note == '^^ ' then
+						local instrument = channel.instrument
+						local volume     = channel.volumecmd
+
+						-- Process according to overcomplicated logic
+						-- regarding extant or missing elements...
+
+						-- Y Note, Y Instrument -> retrigger note, switch instrument, set   volume (vol or max)
+						-- Y Note, N Instrument -> retrigger note, leave  instrument, leave volume
+						-- N Note, Y Instrument -> leave     note, switch instrument, set   volume (vol or max)
+						-- N Note, N Instrument -> check volume
+
+						if note == '^^ ' then
 							-- Note cut.
 							voices[ch].notePeriod = 0
+							note = false
 						end
 
-						local instrument = channel.instrument
-						if instrument then
+						-- At this point, note can only be a number or false.
+						if note and instrument then
+							-- Note pitch.
+							voices[ch]:setNote(note)
+							voices[ch]._currentOffset = 0.0
 							-- Apply instrument.
 							voices[ch]:setInstrument(instrument-1)
+							-- Set volume.
+							if volume then
+								-- Apply extra volume command.
+								-- Range: 0x00-0x40, so normalize by 64.
+								voices[ch]:setVolume(volume / 64)
+							else
+								voices[ch]:setVolume(module.instruments[voices[ch].instrument].volume / 64)
+							end
+						elseif note and not instrument then
+							-- Note pitch.
+							voices[ch]:setNote(note)
+							voices[ch]._currentOffset = 0.0
+							-- We only set volume if the command is present here.
+							if volume then
+								-- Apply extra volume command.
+								-- Range: 0x00-0x40, so normalize by 64.
+								voices[ch]:setVolume(volume / 64)
+							end
+						elseif not note and instrument then
+							-- Apply instrument.
+							voices[ch]:setInstrument(instrument-1)
+							-- Set volume.
+							if volume then
+								-- Apply extra volume command.
+								-- Range: 0x00-0x40, so normalize by 64.
+								voices[ch]:setVolume(volume / 64)
+							else
+								voices[ch]:setVolume(module.instruments[voices[ch].instrument].volume / 64)
+							end
+						elseif not note and not instrument then
+							-- Set volume.
+							if volume then
+								-- Apply extra volume command.
+								-- Range: 0x00-0x40, so normalize by 64.
+								voices[ch]:setVolume(volume / 64)
+							else
+								voices[ch]:setVolume(module.instruments[voices[ch].instrument].volume / 64)
+							end
 						end
 
-						local volume     = channel.volumecmd
-						if volume then
-							-- Apply extra volume command.
-							-- Range: 0x00-0x40, so normalize by 64.
-							voices[ch]:setVolume(volume / 64)
-						else
-							voices[ch]:setVolume(1.0)
-						end
+
 
 						-- T0 effects.
 						if     effect == 'A' then
