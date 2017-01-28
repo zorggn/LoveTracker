@@ -298,72 +298,76 @@ routine.update = function(dt)
 		end
 
 		-- Advance playback position.
-		if not (posJump or patBreak) then
-			-- Simple case.
-			if currentTick + 1 < speed then
-				currentTick = currentTick + 1
+
+		-- Simple case.
+		if currentTick + 1 < speed then
+			currentTick = currentTick + 1
+		else
+			currentTick = 0
+			--print(currentOrder, currentPattern)
+			if currentRow + 1 <= #module.patterns[currentPattern] then
+				currentRow = currentRow + 1
 			else
-				currentTick = 0
-				--print(currentOrder, currentPattern)
-				if currentRow + 1 <= #module.patterns[currentPattern] then
-					currentRow = currentRow + 1
+				currentRow = 0
+				if currentOrder + 1 <= #module.orders then
+					currentOrder = currentOrder + 1
+					currentPattern = module.orders[currentOrder]
 				else
-					currentRow = 0
-					if currentOrder + 1 <= #module.orders then
-						currentOrder = currentOrder + 1
-						currentPattern = module.orders[currentOrder]
-					else
-						currentOrder = 0
-						currentPattern = module.orders[currentOrder]
-					end
-				end
-			end
-			-- Check for markers and empty pattern slots.
-			-- Not sure if 255 can appear between legit slots or not, if not, this code
-			-- can be adjusted a bit.
-			if currentPattern >= 254 then
-				--print "Found Marker / Empty pattern!"
-				for i = currentOrder, #module.orders do
-					--print("order ",i,"has pattern ",module.orders[i])
-					if module.orders[i] < 254 then
-						currentOrder = i
-						currentPattern = module.orders[currentOrder]
-						-- Unless we want the code jumping in the middle of random patterns
-						-- if the posjump/patbreak would go to an invalid pattern, then
-						-- leave this uncommented.
-						currentTick = 0
-						currentRow = 0
-						break
-					end
-				end
-				if currentPattern >= 254 then
-					-- Restart from beginning
 					currentOrder = 0
 					currentPattern = module.orders[currentOrder]
-					currentTick = 0
-					currentRow = 0
 				end
 			end
-		else
-			-- Special handling.
-			currentTick = 0
-			if posJump and not patBreak then
-				-- Jump to 0th row of given order.
-				currentOrder = posJump % #module.orders
-				currentPattern = module.orders[currentOrder]
-				currentRow = 0
-			elseif not posJump and patBreak then
-				-- Jump to given row of next order.
-				currentOrder = (currentOrder + 1) % #module.orders
-				currentPattern = module.orders[currentOrder]
-				currentRow = patBreak % #module.patterns[currentPattern]
-			else
-				-- Jump to given row of given order.
-				currentOrder = posJump % #module.orders
-				currentPattern = module.orders[currentOrder]
-				currentRow = patBreak % #module.patterns[currentPattern]
+		end
+		-- Check for markers and empty pattern slots.
+		-- Not sure if 255 can appear between legit slots or not, if not, this code
+		-- can be adjusted a bit.
+		if currentPattern >= 254 then
+			--print "Found Marker / Empty pattern!"
+			for i = currentOrder, #module.orders do
+				--print("order ",i,"has pattern ",module.orders[i])
+				if module.orders[i] < 254 then
+					currentOrder = i
+					currentPattern = module.orders[currentOrder]
+					-- Unless we want the code jumping in the middle of random patterns
+					-- if the posjump/patbreak would go to an invalid pattern, then
+					-- leave this uncommented.
+					currentTick = 0
+					currentRow = 0
+					break
+				end
 			end
-			posJump, patBreak = false, false
+			if currentPattern >= 254 then
+				-- Restart from beginning
+				currentOrder = 0
+				currentPattern = module.orders[currentOrder]
+				currentTick = 0
+				currentRow = 0
+			end
+		end
+
+		-- Special handling.
+		if posJump or patBreak then
+			-- we need to do this on the next T0 tick...
+			if currentTick == 0 then
+				currentTick = 0
+				if posJump and not patBreak then
+					-- Jump to 0th row of given order.
+					currentOrder = posJump % #module.orders
+					currentPattern = module.orders[currentOrder]
+					currentRow = 0
+				elseif not posJump and patBreak then
+					-- Jump to given row of next order.
+					currentOrder = (currentOrder + 1) % #module.orders
+					currentPattern = module.orders[currentOrder]
+					currentRow = patBreak % #module.patterns[currentPattern]
+				else
+					-- Jump to given row of given order.
+					currentOrder = posJump % #module.orders
+					currentPattern = module.orders[currentOrder]
+					currentRow = patBreak % #module.patterns[currentPattern]
+				end
+				posJump, patBreak = false, false
+			end
 		end
 
 		-- Stats.
