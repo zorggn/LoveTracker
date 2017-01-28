@@ -55,7 +55,8 @@ end
 local voice = {}
 
 voice.setNote = function(v, note)
-	v.notePeriod = note
+	v.notePeriod = notePeriod[note]
+	v._currentOffset = 0.0
 end
 
 voice.setInstrument = function(v, instrument)
@@ -71,12 +72,27 @@ voice.setOffset = function(v, offset)
 end
 
 voice.process = function(v)
+	if v.notePeriod == 0 then return 0 end
+	if not v.instrument then return 0 end
+	local normalizer = defaultC4speed / module.instruments[v.instrument].c4speed
+	local currPeriod = v.notePeriod * normalizer
+	v._currentOffset = v._currentOffset + (fixedClock / currPeriod)
+	if v._currentOffset > module.instruments[v.instrument].data:getSampleCount() then
+		v._currentOffset = 0.0
+		v.notePeriod = 0
+		return 0
+	end
+	--v._currentOffset = v._currentOffset % module.instruments[v.instrument].data:getSampleCount()
+	local smp = module.instruments[v.instrument].data:getSample(math.floor(v._currentOffset))
+	return smp
 end
 
 local mtVoice = {__index = voice}
 
 local newVoice = function()
 	local v = setmetatable({},mtVoice)
+
+	v._currentOffset = 0.0
 
 	v.notePeriod    = 0
 	v.instrument    = 0
@@ -141,15 +157,6 @@ local tickAccum      = 0                     -- seconds
 local samplesMixed   = 0                     -- smp
 
 local patBreak, posJump = false, false       -- If true, handle position update specially.
--------------------------------
-
--- Reference to the module
-local module
-
-local currentOrder
-local currentPattern
-local currentRow
-local currentTick
 -------------------------------
 
 -- Functions
@@ -372,8 +379,8 @@ routine.update = function(dt)
 		-- Render each voice, and mix them together
 		-- |output| <= 1.0 * N -> Normalize to [-1,1]
 		local smp = 0.0
-		for i = 0, 31 do
-			smp = smp + ((playbackPos%24==0) and (((playbackPos%24)/12)-12) or love.math.random()) -- Beat test
+		for ch = 0, module.chnNum - 1 do
+			smp = smp + voices[ch]:process()
 		end
 		smp = smp / 32.0
 		buffer:setSample(bufferOffset, smp)
