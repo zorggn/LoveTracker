@@ -1,7 +1,9 @@
 -- Scream Tracker 3 "S3M" module file importer
 -- by zorg @ 2016-2017 § ISC
 
-local log = function(str,...) print(string.format(str,...)) end
+local log = function(str,...)
+	--print(string.format(str,...))
+end
 local util = require('util')
 
 -- The structure of the module kept in memory:
