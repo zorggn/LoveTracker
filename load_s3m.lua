@@ -648,7 +648,7 @@ function load_s3m(file)
 			structure.instruments[i].data = love.sound.newSoundData(len, 44100, 8, 1)
 
 			-- Faster to process inside RAM than to read in from disk byte-by-byte.
-			local buffer = file:read(len)
+			local buffer, cnt = file:read(len)
 
 			-- Fill up sounddata with samplepoint values.
 			for j = 0, structure.instruments[i].smpLen-1 do
