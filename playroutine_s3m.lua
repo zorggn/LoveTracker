@@ -231,33 +231,37 @@ routine.update = function(dt)
 
 				if channel then
 
-					-- Check for cell components.
-
-					local note       = channel.note
-					if type(note) == 'number' then
-						-- Note pitch.
-					elseif note == '^^ ' then
-						-- Note cut.
-					end
-
-					local instrument = channel.instrument
-					if instrument then
-						-- Apply instrument.
-					end
-
-					local volume     = channel.volumecmd
-					if volume then
-						-- Apply extra volume command.
-						-- Range: 0x00-0x40, so normalize by 64.
-						voices[ch]:setVolume(volume / 64)
-					end
-
 					local effect      = channel.effectcmd
 					effect = effect and string.char(effect+64) or false
 					local effectParam = channel.effectprm
 
 					-- First tick of every row.
 					if currentTick == 0 then
+
+
+						-- Check for cell components.
+
+						local note       = channel.note
+						if type(note) == 'number' then
+							-- Note pitch.
+							voices[ch]:setNote(note)
+						elseif note == '^^ ' then
+							-- Note cut.
+							voices[ch].notePeriod = 0
+						end
+
+						local instrument = channel.instrument
+						if instrument then
+							-- Apply instrument.
+							voices[ch]:setInstrument(instrument-1)
+						end
+
+						local volume     = channel.volumecmd
+						if volume then
+							-- Apply extra volume command.
+							-- Range: 0x00-0x40, so normalize by 64.
+							voices[ch]:setVolume(volume / 64)
+						end
 
 						-- T0 effects.
 						if     effect == 'A' then
