@@ -442,7 +442,12 @@ routine.update = function(dt)
 	-- Render samplepoint(s); count based on elapsed CPU time.
 	-- Technically this isn't the best thing to do, but whatever.
 	-- Code doesn't deal with stereo, for now.
-	local samplesToMix = math.ceil(dt / samplingPeriod)
+	local samplesToMix
+	if trackingMode == 'cpu' then
+		samplesToMix = math.ceil(dt / samplingPeriod)
+	elseif trackingMode == 'buffer' then
+		samplesToMix = buffer:getSampleCount()
+	end
 	for i=0, samplesToMix do
 
 		-- Render each voice, and mix them together
