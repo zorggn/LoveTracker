@@ -452,6 +452,12 @@ routine.draw = function()
 end
 -------------------------------
 
+love.keypressed = function(k,s)
+	if s == 't' then
+		if trackingMode == 'buffer' then trackingMode = 'cpu' else trackingMode = 'buffer' end
+	end
+end
+
 --------------
 return routine
 -------------------------------
