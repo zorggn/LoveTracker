@@ -83,7 +83,7 @@ voice.process = function(v)
 		return 0
 	end
 	--v._currentOffset = v._currentOffset % module.instruments[v.instrument].data:getSampleCount()
-	local smp = module.instruments[v.instrument].data:getSample(math.floor(v._currentOffset))
+	local smp = module.instruments[v.instrument].data:getSample(math.floor(v._currentOffset)) * v.sampleVolume
 	return smp
 end
 
@@ -261,6 +261,8 @@ routine.update = function(dt)
 							-- Apply extra volume command.
 							-- Range: 0x00-0x40, so normalize by 64.
 							voices[ch]:setVolume(volume / 64)
+						else
+							voices[ch]:setVolume(1.0)
 						end
 
 						-- T0 effects.
