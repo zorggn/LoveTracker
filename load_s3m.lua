@@ -206,7 +206,7 @@ function load_s3m(file)
 	-- 0x1300 - ST3.00 - volslides happen on every frame, not just non-T0 frames!
 	-- 0x1301, 03, 20 -- ST3.01, 03, 20 - otherwise.
 	local cwtv = util.ansi2number(file:read(2), 'LE')
-	print(string.format("%X",cwtv))
+	log("%X",cwtv)
 	if  cwtv == 0x1300 then structure.version = '3.00' elseif
 		cwtv == 0x1301 then structure.version = '3.01' elseif
 		cwtv == 0x1303 then structure.version = '3.03' elseif
