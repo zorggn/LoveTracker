@@ -419,7 +419,7 @@ function load_s3m(file)
 			local a,b,c = util.ansi2number(file:read(1)), util.ansi2number(file:read(1)), util.ansi2number(file:read(1))
 			-- sample_pos = (a SHL 16) + ((c SHL 8) + b)
 			instrument.memPos = b * 0x10 + c * 0x1000 + a * 0x100000 -- UL -> 32bit ok FIX LATER
-			instrument.memPos = instrument.memPos * 16 -- Just as above.
+			-- This one doesn't need to be multiplied by 16 / shifted left by 4!
 			log("Sample position: (%X)", instrument.memPos)
 
 			-- +0x10: Sample length.
