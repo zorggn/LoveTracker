@@ -111,7 +111,7 @@ local voices
 local samplingRate   = 44100                 -- Hz (1/seconds)
 local bitDepth       =    16                 -- bits
 local channelCount   =     1                 -- channels
-local bufferSize     =  256                 -- samplepoints
+local bufferSize     =  1024                 -- samplepoints
 local buffer         = love.sound.newSoundData(
 					bufferSize,
 					samplingRate, 
