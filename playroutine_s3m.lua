@@ -2,6 +2,54 @@
 -- by zorg @ 2017 § ISC
 -------------------------------
 
+-- Reference to the module
+local module
+
+local currentOrder
+local currentPattern
+local currentRow
+local currentTick
+-------------------------------
+
+-- Period / Frequency Shenanigans
+
+C4speedFinetunes = {
+	[ 0x00 ] = 7895, -- -8
+	[ 0x01 ] = 7941,
+	[ 0x02 ] = 7985,
+	[ 0x03 ] = 8046,
+	[ 0x04 ] = 8107,
+	[ 0x05 ] = 8169,
+	[ 0x06 ] = 8232,
+	[ 0x07 ] = 8280,
+	[ 0x08 ] = 8363, -- Default
+	[ 0x09 ] = 8413,
+	[ 0x0A ] = 8463,
+	[ 0x0B ] = 8529,
+	[ 0x0C ] = 8581,
+	[ 0x0D ] = 8651,
+	[ 0x0E ] = 8723,
+	[ 0x0F ] = 8757, -- +7
+}
+
+defaultC4speed = C4speedFinetunes[ 0x08 ]
+
+fourthOctavePeriod = {1712, 1616, 1524, 1440,1356,1280,1208,1140,1076,1016,0960,0907}
+
+baseClock  = defaultC4speed * fourthOctavePeriod[1]
+fixedClock = baseClock / 44100 --samplingRate
+
+notePeriod = {}
+
+for octave = 0, 10 do
+	for note = 1, 12 do
+		notePeriod[octave*12+note] = (defaultC4speed * 16 * (fourthOctavePeriod[note] / 2^octave)) / C4speedFinetunes[8]
+	end
+end
+
+
+-------------------------------
+
 -- Voices
 
 local voice = {}
