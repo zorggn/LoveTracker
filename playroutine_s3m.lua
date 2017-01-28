@@ -378,6 +378,36 @@ routine.update = function(dt)
 				end
 			end
 		end
+
+		-- Special handling.
+		if posJump or patBreak then
+			-- we need to do this on the next T0 tick...
+			if currentTick == 0 then
+				currentTick = 0
+				if posJump and not patBreak then
+					-- Jump to 0th row of given order.
+					currentOrder = posJump % #module.orders
+					currentPattern = module.orders[currentOrder]
+					currentRow = 0
+				elseif not posJump and patBreak then
+					-- Jump to given row of next order.
+					currentOrder = (currentOrder + 1) % #module.orders
+					currentPattern = module.orders[currentOrder]
+					if currentPattern < 254 then
+						currentRow = patBreak % #module.patterns[currentPattern]
+					end
+				else
+					-- Jump to given row of given order.
+					currentOrder = posJump % #module.orders
+					currentPattern = module.orders[currentOrder]
+					if currentPattern < 254 then
+						currentRow = patBreak % #module.patterns[currentPattern]
+					end
+				end
+				posJump, patBreak = false, false
+			end
+		end
+
 		-- Check for markers and empty pattern slots.
 		-- Not sure if 255 can appear between legit slots or not, if not, this code
 		-- can be adjusted a bit.
@@ -402,31 +432,6 @@ routine.update = function(dt)
 				currentPattern = module.orders[currentOrder]
 				currentTick = 0
 				currentRow = 0
-			end
-		end
-
-		-- Special handling.
-		if posJump or patBreak then
-			-- we need to do this on the next T0 tick...
-			if currentTick == 0 then
-				currentTick = 0
-				if posJump and not patBreak then
-					-- Jump to 0th row of given order.
-					currentOrder = posJump % #module.orders
-					currentPattern = module.orders[currentOrder]
-					currentRow = 0
-				elseif not posJump and patBreak then
-					-- Jump to given row of next order.
-					currentOrder = (currentOrder + 1) % #module.orders
-					currentPattern = module.orders[currentOrder]
-					currentRow = patBreak % #module.patterns[currentPattern]
-				else
-					-- Jump to given row of given order.
-					currentOrder = posJump % #module.orders
-					currentPattern = module.orders[currentOrder]
-					currentRow = patBreak % #module.patterns[currentPattern]
-				end
-				posJump, patBreak = false, false
 			end
 		end
 
