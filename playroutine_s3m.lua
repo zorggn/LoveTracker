@@ -1,8 +1,37 @@
--- Basic playroutine skellington
+-- Basic s3m playroutine skellington
 -- by zorg @ 2017 § ISC
 -------------------------------
 
--- Reference to the module
+-- Audio Parameters
+-- References: N/A
+
+local samplingRate   = 44100                 -- Hz (1/seconds)
+local bitDepth       =    16                 -- bits
+local channelCount   =     1                 -- channels
+-------------------------------
+
+-- Sound Buffer
+-- References: Audio Parameters
+
+local bufferOffset   =    0                  -- samplepoints
+local bufferSize     = 1024                  -- samplepoints
+local buffer         = love.sound.newSoundData(
+					bufferSize,
+					samplingRate, 
+					bitDepth, 
+					channelCount
+					)                        -- SoundData
+-------------------------------
+
+-- Queuable Source
+-- References: Audio Parameters
+
+local qSource      = love.audio.newQueueableSource(samplingRate, bitDepth, channelCount)
+-------------------------------
+
+-- Module
+-- References: N/A (External)
+
 local module
 
 local currentOrder
@@ -37,7 +66,7 @@ defaultC4speed = C4speedFinetunes[ 0x08 ]
 fourthOctavePeriod = {1712, 1616, 1524, 1440,1356,1280,1208,1140,1076,1016,0960,0907}
 
 baseClock  = defaultC4speed * fourthOctavePeriod[1]
-fixedClock = baseClock / 44100 --samplingRate
+fixedClock = baseClock / samplingRate
 
 notePeriod = {}
 
@@ -115,26 +144,6 @@ local newVoice = function()
 end
 
 local voices
--------------------------------
-
--- Sound Buffer
-
-local samplingRate   = 44100                 -- Hz (1/seconds)
-local bitDepth       =    16                 -- bits
-local channelCount   =     1                 -- channels
-local bufferSize     =  1024                 -- samplepoints
-local buffer         = love.sound.newSoundData(
-					bufferSize,
-					samplingRate, 
-					bitDepth, 
-					channelCount
-					)                        -- SoundData
-local bufferOffset   = 0                     -- samplepoints
--------------------------------
-
--- Queuable Source
-
-local qSource      = love.audio.newQueueableSource(samplingRate, bitDepth, channelCount)
 -------------------------------
 
 -- Global Parameters
@@ -439,11 +448,12 @@ routine.update = function(dt)
 		playbackPos = playbackPos + 1
 	end
 
-	-- Render samplepoint(s); count based on elapsed CPU time.
-	-- Technically this isn't the best thing to do, but whatever.
+	-- Render samplepoint(s).
 	-- Code doesn't deal with stereo, for now.
 	local samplesToMix
 	if trackingMode == 'cpu' then
+		-- This version is guaranteed to keep up, but
+		-- sadly it's prone to hiccups.
 		samplesToMix = math.ceil(dt / samplingPeriod)
 	elseif trackingMode == 'buffer' then
 		samplesToMix = buffer:getSampleCount()
@@ -476,6 +486,10 @@ routine.update = function(dt)
 end
 
 routine.draw = function()
+	-- TODO: replace all of this with a more comprehendable (and F1 toggleable) text object
+	-- that both has more entries, and is more logically laid out...
+	-- Window width should be 2*8 + (numChans * 13 * 8) + ((numChans + 1) * 8)
+	-- Which is rows, channel contents and divisor lines.
 	love.graphics.setColor(1,1,1)
 	love.graphics.print(("Samples mixed:       %d (%d)"):format(samplesMixed, math.floor(samplesTotal/bufferSize)), 0, 0)
 	love.graphics.print(("Playback position:   %d"):format(playbackPos),         0, 12)
@@ -519,8 +533,8 @@ routine.draw = function()
 					love.graphics.setColor(0.75,0.75,0.25)
 				end
 			end
-			love.graphics.print(("%02d"):format(i), 0, 84+i*12)
-			love.graphics.print(module.printRow(module.patterns[currentPattern][i], module.chnNum),14,84+i*12)
+			love.graphics.print(("%02X"):format(i), 0, 84+i*12)
+			love.graphics.print(module.printRow(module.patterns[currentPattern][i], module.chnNum),2*8,84+i*12)
 		end
 	end
 end
