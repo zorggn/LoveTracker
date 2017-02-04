@@ -193,6 +193,9 @@ local newVoice = function()
 	v.sampleVolume  = 1.0 -- [ 0, 1]
 	v.sampleOffset  = 0.0 -- [ 0, 65280] Oxx
 
+	v.volSlide      = 0
+	v.portamento    = 0
+
 	return v
 end
 
@@ -380,6 +383,116 @@ routine.update = function(dt)
 							local offset = math.clamp(effectParam, 0x00, 0xFF)
 							offset = offset * 0x100
 							voices[ch]:setOffset(offset)
+						elseif effect == 'D' then
+							-- Store values if parameter is not 00
+							if effectParam > 0 then
+								voices[ch].volSlide = effectParam
+							end
+							-- Work on stored values
+							local x = math.floor(voices[ch].volSlide/16)
+							local y =            voices[ch].volSlide%16
+							-- If we have a fine slide, then process it here.
+							-- Note that in the case of DFF, we prioritize by fine sliding up.
+							if y == 0xF then
+								-- up x units
+								voices[ch].sampleVolume = voices[ch].sampleVolume + x / 64
+							elseif x == 0xF then
+								-- down y units
+								voices[ch].sampleVolume = voices[ch].sampleVolume - y / 64
+							end
+							-- "Fast Volume Slide" bug handling
+							-- (Flags parsing not yet implemented, append this when it is.)
+							if module.version == '3.00' then
+								if y == 0x0 then
+									-- up x units
+									voices[ch].sampleVolume = voices[ch].sampleVolume + x / 64
+								elseif x == 0x0 then
+									-- down y units
+									voices[ch].sampleVolume = voices[ch].sampleVolume - y / 64
+								end
+							end
+							-- Fix bounds.
+							voices[ch].sampleVolume = math.clamp(voices[ch].sampleVolume, 0, 1)
+						elseif effect == 'E' then
+							-- Store values if parameter is not 00
+							if effectParam > 0 then
+								voices[ch].portamento = effectParam
+							end
+							
+							if math.floor(voices[ch].portamento/16) == 0xF then
+								-- Fine porta
+								voices[ch].notePeriod = voices[ch].notePeriod + (voices[ch].portamento%16) * 4
+							elseif math.floor(voices[ch].portamento/16) == 0xE then
+								-- Extra fine porta
+								voices[ch].notePeriod = voices[ch].notePeriod + (voices[ch].portamento%16)
+							end
+							-- Probably should clamp period values too...
+						elseif effect == 'F' then
+							-- Store values if parameter is not 00
+							if effectParam > 0 then
+								voices[ch].portamento = effectParam
+							end
+							
+							if math.floor(voices[ch].portamento/16) == 0xF then
+								-- Fine porta
+								voices[ch].notePeriod = voices[ch].notePeriod - (voices[ch].portamento%16) * 4
+							elseif math.floor(voices[ch].portamento/16) == 0xE then
+								-- Extra fine porta
+								voices[ch].notePeriod = voices[ch].notePeriod - (voices[ch].portamento%16)
+							end
+							-- Probably should clamp period values too...
+						elseif effect == 'G' then
+							-- Store values if parameter is not 00
+							-- Note that this uses the same slot that E/F uses.
+							if effectParam > 0 then
+								voices[ch].portamento = effectParam
+							end
+							if note then
+								voices[ch].slideToNote = notePeriod[note]
+							end
+						end
+
+					else
+						-- Inbetween Effects (All ticks except T0).
+
+						if     effect == 'D' then
+							-- Work on stored values
+							local x = math.floor(voices[ch].volSlide/16)
+							local y =            voices[ch].volSlide%16
+							-- If we don't have a fine slide, then process it here.
+							if y == 0x0 then
+								-- up x units
+								voices[ch].sampleVolume = voices[ch].sampleVolume + x / 64
+							elseif x == 0x0 then
+								-- down y units
+								voices[ch].sampleVolume = voices[ch].sampleVolume - y / 64
+							end
+							-- Fix bounds.
+							voices[ch].sampleVolume = math.clamp(voices[ch].sampleVolume, 0, 1)
+						elseif effect == 'E' then
+							if voices[ch].portamento < 0xE0 then
+								voices[ch].notePeriod = voices[ch].notePeriod + voices[ch].portamento * 4
+							end
+							-- Probably should clamp period values too...
+						elseif effect == 'F' then
+							if voices[ch].portamento < 0xE0 then
+								voices[ch].notePeriod = voices[ch].notePeriod - voices[ch].portamento * 4
+							end
+							-- Probably should clamp period values too...
+						elseif effect == 'G' then
+							-- Slide to the given note.
+							-- Note that because of the *4, we need to manually avoid any potential oscillation.
+							if voices[ch].notePeriod > voices[ch].slideToNote then
+								voices[ch].notePeriod = voices[ch].notePeriod - voices[ch].portamento * 4
+								if voices[ch].notePeriod < voices[ch].slideToNote then
+									voices[ch].notePeriod = voices[ch].slideToNote
+								end
+							elseif voices[ch].notePeriod < voices[ch].slideToNote then
+								voices[ch].notePeriod = voices[ch].notePeriod + voices[ch].portamento * 4
+								if voices[ch].notePeriod > voices[ch].slideToNote then
+									voices[ch].notePeriod = voices[ch].slideToNote
+								end
+							end
 						end
 
 					end
