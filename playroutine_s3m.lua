@@ -1,5 +1,8 @@
 -- Basic s3m playroutine skellington
 -- by zorg @ 2017 § ISC
+
+-- See doc/s3m.txt for references.
+
 -------------------------------
 
 -- Audio Parameters
@@ -135,15 +138,22 @@ voice.setOffset = function(v, offset)
 end
 
 voice.process = function(v)
+	-- No note to play.
 	if v.notePeriod == 0 then return 0 end
+
+	-- No instrument to sound.
 	if not v.instrument then return 0 end
+
+
 	local normalizer = defaultC4speed / module.instruments[v.instrument].c4speed
 	local currPeriod = v.notePeriod * normalizer
 	v._currentOffset = v._currentOffset + (fixedClock / currPeriod)
+
 	if v.sampleOffset > 0 then
 		v._currentOffset = v._currentOffset + v.sampleOffset
 		v.sampleOffset = 0.0
 	end
+
 	if module.instruments[v.instrument].looping then
 		-- loop part between smpLoopStart and smpLoopEnd
 		local addend = v._currentOffset - module.instruments[v.instrument].smpLoopEnd
@@ -157,6 +167,8 @@ voice.process = function(v)
 			return 0
 		end
 	end
+
+	-- Offset clamping for safety.
 	v._currentOffset = v._currentOffset % module.instruments[v.instrument].data:getSampleCount()
 
 	-- Interpolation
@@ -276,6 +288,8 @@ routine.update = function(dt)
 
 			-- Process tracks ("channels").
 			for ch=0, module.chnNum-1 do
+
+				-- TODO: Playback/Disable (not Mute) channels should be implemented here.
 
 				local channel = module.patterns[currentPattern][currentRow][ch]
 
