@@ -33,14 +33,43 @@ local qSource      = love.audio.newQueueableSource(samplingRate, bitDepth, chann
 -- References: N/A (External)
 
 local module
-
-local currentOrder
-local currentPattern
-local currentRow
-local currentTick
 -------------------------------
 
--- Period / Frequency Shenanigans
+-- Runtime
+-- References: Audio Parameters
+
+local globalVolume   = 1.0
+local interpolation = 'nearest'              -- globally set for all voices
+
+local currentOrder                           -- order index
+local currentPattern                         -- pattern index
+local currentRow                             -- row index
+local currentTick                            -- tick index
+
+local tempo                                  -- beats per minute (Factor, not actual BPM!)
+local speed                                  -- ticks per row (Divisor)
+local timeSigNumer   =   4                   -- rows per beat (For actual BPM calculation)
+local timeSigDenom   =   4                   -- row type (note lengths, for "midi")
+
+local midiPPQ                                -- pulse per quarternote
+local samplingPeriod = 1 / samplingRate      -- seconds (per smp)
+local tickPeriod                             -- seconds (per tick)
+local arpeggioPeriod = samplingRate / 50     -- seconds (per Jxy state change.)
+
+local actualBPM                              -- beats per minute (This one is the real deal.)
+
+local cpuTime        = 0.0                   -- seconds (based on love.timer)
+local bufferTime     = 0.0                   -- seconds (based on processed smp-s)
+
+local trackingMode   = 'buffer'              -- cpu or buffer based playback cursor positioning
+local tickAccum      = 0                     -- seconds
+local samplesMixed   = 0                     -- smp (samples mixed current frame)
+local samplesTotal   = 0                     -- smp (samples mixed total)
+
+local patBreak, posJump = false, false       -- If true, handle position update specially.
+-------------------------------
+
+-- Constants
 
 C4speedFinetunes = {
 	[ 0x00 ] = 7895, -- -8
