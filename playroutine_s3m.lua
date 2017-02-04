@@ -556,6 +556,10 @@ routine.draw = function()
 		love.graphics.print(("/ %d"):format(speed-1),                          56*8, 36)
 
 		if not module.patterns[currentPattern] then return end
+
+		love.graphics.push('all')
+		love.graphics.translate(0, 300+(-12*currentRow))
+
 		for i=0, #module.patterns[currentPattern] do
 			if i ~= currentRow then
 				love.graphics.setColor(0.5,0.5,0.5)
@@ -569,6 +573,9 @@ routine.draw = function()
 			love.graphics.print(("%02X"):format(i), 0, 84+i*12)
 			love.graphics.print(module.printRow(module.patterns[currentPattern][i], module.chnNum),2*8,84+i*12)
 		end
+
+		love.graphics.pop()
+
 	end
 end
 -------------------------------
