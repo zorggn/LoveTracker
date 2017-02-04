@@ -196,39 +196,6 @@ end
 local voices
 -------------------------------
 
--- Global Parameters
-
-local tempo                                  -- beats per minute (Factor, not actual BPM!)
-local speed                                  -- ticks per row (Divisor)
-local timeSigNumer   =   4                   -- rows per beat (For actual BPM calculation)
-local timeSigDenom   =   4                   -- row type (note lengths, for "midi")
-
--- Calculated Parameters
-
-local midiPPQ                                -- pulse per quarternote
-local samplingPeriod = 1 / samplingRate      -- seconds (per smp)
-local tickPeriod                             -- seconds (per tick)
-local actualBPM                              -- beats per minute (This one is the real deal.)
-
-local restartOrder   = 0
-local globalVolume   = 1.0
--------------------------------
-
--- Processing-related Variables
-
-local cpuTime        = 0.0                   -- seconds (based on love.timer)
-local bufferTime     = 0.0                   -- seconds (based on processed smp-s)
-
-local playbackPos    = 0                     -- ticks
-local samplesTotal   = 0                     -- +smp
-
-local trackingMode   = 'buffer'                 -- cpu or buffer based playback cursor positioning
-local tickAccum      = 0                     -- seconds
-local samplesMixed   = 0                     -- smp
-
-local patBreak, posJump = false, false       -- If true, handle position update specially.
--------------------------------
-
 -- Functions
 
 local fixTiming = function()
@@ -500,9 +467,6 @@ routine.update = function(dt)
 				currentRow = 0
 			end
 		end
-
-		-- Stats.
-		playbackPos = playbackPos + 1
 	end
 
 	-- Render samplepoint(s).
@@ -558,7 +522,7 @@ routine.draw = function()
 	-- Which is rows, channel contents and divisor lines.
 	love.graphics.setColor(1,1,1)
 	love.graphics.print(("Samples mixed:       %d (%d)"):format(samplesMixed, math.floor(samplesTotal/bufferSize)), 0, 0)
-	love.graphics.print(("Playback position:   %d"):format(playbackPos),         0, 12)
+	--love.graphics.print(("Playback position:   %d"):format(playbackPos),         0, 12)
 	love.graphics.print(("Time (Buffer-based): %5.5g"):format(bufferTime),       0, 24)
 	love.graphics.print(("Time (Timer-based):  %5.5g"):format(cpuTime),          0, 36)
 	love.graphics.print(("Sampling period:     %g"):format(samplingPeriod*1000), 0, 48)
