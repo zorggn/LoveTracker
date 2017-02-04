@@ -480,7 +480,10 @@ routine.update = function(dt)
 		-- sadly it's prone to hiccups.
 		samplesToMix = math.ceil(dt / samplingPeriod)
 	elseif trackingMode == 'buffer' then
-		samplesToMix = buffer:getSampleCount()
+		-- This version should be the better one;
+		-- Try rendering as many smp-s as there are in one tick.
+		samplesToMix = math.min(math.floor(tickPeriod / samplingPeriod), buffer:getSampleCount())
+		--samplesToMix = math.floor(1 / tickPeriod) -- maybe this?
 	end
 	for i=0, samplesToMix do
 
