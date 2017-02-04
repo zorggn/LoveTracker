@@ -180,6 +180,9 @@ local mtVoice = {__index = voice}
 local newVoice = function()
 	local v = setmetatable({},mtVoice)
 
+	v.processed = true  -- whether the voice should be processed or not
+	v.muted     = false -- whether the output of the voice should be silenced or not
+
 	v._currentOffset = 0.0
 
 	v.notePeriod    = 0
@@ -573,6 +576,11 @@ end
 love.keypressed = function(k,s)
 	if s == 't' then
 		if trackingMode == 'buffer' then trackingMode = 'cpu' else trackingMode = 'buffer' end
+	end
+	if tonumber(s) then
+		if voices[tonumber(s)] then
+			voices[tonumber(s)].muted = not voices[tonumber(s)].muted
+		end
 	end
 end
 
