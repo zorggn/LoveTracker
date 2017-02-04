@@ -105,6 +105,12 @@ for octave = 0, 10 do
 	end
 end
 
+-- PT compatible (quarter) sine table.
+-- The values exactly match with what ProTracker (and in this case, ScreamTracker 3) uses.
+local sineTable = {}
+for i=0,31 do
+	sineTable[i] = math.floor(math.sin(math.pi*i/32)*255)
+end
 
 -------------------------------
 
