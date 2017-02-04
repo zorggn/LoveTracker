@@ -7,7 +7,7 @@
 
 local samplingRate   = 44100                 -- Hz (1/seconds)
 local bitDepth       =    16                 -- bits
-local channelCount   =     1                 -- channels
+local channelCount   =     2                 -- channels
 -------------------------------
 
 -- Sound Buffer
@@ -160,6 +160,7 @@ voice.process = function(v)
 	v._currentOffset = v._currentOffset % module.instruments[v.instrument].data:getSampleCount()
 	local smp = module.instruments[v.instrument].data:getSample(math.floor(v._currentOffset)) * v.sampleVolume
 	return smp
+	return smp * v.sampleVolume * (1.0-v.panning), smp * v.sampleVolume * v.panning
 end
 
 local mtVoice = {__index = voice}
@@ -171,6 +172,8 @@ local newVoice = function()
 
 	v.notePeriod    = 0
 	v.instrument    = 0
+
+	v.panning       = 0.0
 
 	v.sampleVolume  = 1.0 -- [ 0, 1]
 	v.sampleOffset  = 0.0 -- [ 0, 65280] Oxx
@@ -247,6 +250,13 @@ routine.load = function(mod)
 	voices = {}
 	for i = 0, module.chnNum - 1 do
 		voices[i] = newVoice()
+		if module.defaultPan then
+			-- Is this correct? maybe the chn list used here is the unprocessed one...
+			voices[i].panning = module.defaultPan[i] / 0xF
+		else
+			-- Use the channel "orientation" values.
+			voices[i].panning = module.channelPan[i] / 0xF
+		end
 	end
 
 	-- Step the timer since startup may spike the dt, which
@@ -497,16 +507,25 @@ routine.update = function(dt)
 
 		-- Render each voice, and mix them together
 		-- |output| <= 1.0 * N -> Normalize to [-1,1]
-		local smp = 0.0
+		local smpL, smpR = 0.0, 0.0
 		for ch = 0, module.chnNum - 1 do
-			smp = smp + voices[ch]:process()
+			-- TODO: Playback/Mute (not Disable) channels should be implemented here.
+			local L, R = 0.0, 0.0
+			if not voices[ch].muted then
+				L, R = voices[ch]:process()
+				smpL, smpR = smpL + L, smpR + (R or 0.0)
+			end
 		end
-		smp = smp / 32.0
-		buffer:setSample(bufferOffset, smp)
+
+		--smpL, smpR = smpL / 32.0, smpR / 32.0
+		smpL, smpR = smpL / module.chnNum, smpR / module.chnNum
+
+		buffer:setSample(bufferOffset  , smpL)
+		buffer:setSample(bufferOffset+1, smpR)
 
 		-- Advance buffer pointer, flush buffer if full.
-		bufferOffset = bufferOffset + 1
-		if bufferOffset >= buffer:getSampleCount() then
+		bufferOffset = bufferOffset + 2
+		if bufferOffset >= buffer:getSampleCount()*buffer:getChannels() then
 			bufferOffset = 0
 			qSource:queue(buffer)
 			qSource:play() -- For safety.
