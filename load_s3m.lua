@@ -1,5 +1,7 @@
--- Scream Tracker 3 "S3M" module file importer
+-- Scream Tracker 3 "S3M" module file importer/parser
 -- by zorg @ 2016-2017 § ISC
+
+-- See doc/s3m.txt for references.
 
 local log = function(str,...)
 	--print(string.format(str,...))
@@ -286,6 +288,7 @@ function load_s3m(file)
 	for i = 0, 31 do
 		local n = util.ansi2number(file:read(1))
 		-- OPL stuff if >= 16... 255 means it's disabled.
+		-- Alternatively, OPL channels go from 8 to 30. (9 L melo, 9 R melo, 5 drum), and 128 is the disabled flag.
 		if n < 16 then
 			structure.channelMap[i] = pos
 			log("    Channel %d mapped to %d.", i, pos)
@@ -345,6 +348,9 @@ function load_s3m(file)
 	---------------------------------------------------------------------------
 	-- Read in parapointers.
 	---------------------------------------------------------------------------
+
+	-- TL Note: Parapointers are technically named after assembly paragraph pointers,
+	-- since they're on 16 byte boundaries.
 
 	-- Read instrument parapointers.
 	local pptrSmp = {} -- max.  99, as before
