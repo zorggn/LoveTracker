@@ -356,7 +356,7 @@ routine.update = function(dt)
 								-- Range: 0x00-0x40, so normalize by 64.
 								voices[ch]:setVolume(volume / 64)
 							else
-								voices[ch]:setVolume(module.instruments[voices[ch].instrument].volume / 64)
+								--voices[ch]:setVolume(module.instruments[voices[ch].instrument].volume / 64)
 							end
 						end
 
