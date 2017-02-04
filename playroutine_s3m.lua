@@ -312,8 +312,10 @@ routine.update = function(dt)
 						-- At this point, note can only be a number or false.
 						if note and instrument then
 							-- Note pitch.
-							voices[ch]:setNote(note)
-							voices[ch]._currentOffset = 0.0
+							if effect ~= 'G' then
+								voices[ch]:setNote(note)
+								voices[ch]._currentOffset = 0.0
+							end
 							-- Apply instrument.
 							voices[ch]:setInstrument(instrument-1)
 							-- Set volume.
@@ -326,8 +328,10 @@ routine.update = function(dt)
 							end
 						elseif note and not instrument then
 							-- Note pitch.
-							voices[ch]:setNote(note)
-							voices[ch]._currentOffset = 0.0
+							if effect ~= 'G' then
+								voices[ch]:setNote(note)
+								voices[ch]._currentOffset = 0.0
+							end
 							-- We only set volume if the command is present here.
 							if volume then
 								-- Apply extra volume command.
