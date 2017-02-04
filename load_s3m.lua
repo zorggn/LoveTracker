@@ -295,9 +295,9 @@ function load_s3m(file)
 			pos = pos + 1
 			-- Not panning levels, only "orientation"...
 			if n <= 7 then
-				structure.channelPan[i] = 'L' -- 0x33 according to OpenMPT source, 0x3 according to FireLight tutorial.
+				structure.channelPan[i] = 0x3 -- L; 0x33 according to OpenMPT src, 0x3 according to FireLight tutorial.
 			else
-				structure.channelPan[i] = 'R' -- 0xCC according to OpenMPT source 0xC according to FireLight tutorial.
+				structure.channelPan[i] = 0xC -- R; 0xCC according to OpenMPT src, 0xC according to FireLight tutorial.
 			end
 		end
 		-- Non-valid ones don't map to any channel, so they be nil... that is, until it's revealed that the code
