@@ -158,8 +158,20 @@ voice.process = function(v)
 		end
 	end
 	v._currentOffset = v._currentOffset % module.instruments[v.instrument].data:getSampleCount()
-	local smp = module.instruments[v.instrument].data:getSample(math.floor(v._currentOffset)) * v.sampleVolume
-	return smp
+
+	-- Interpolation
+	local smp
+	if interpolation == 'nearest' then
+		-- 0th order interpolation: nearest neighbour (piecewise constant)
+		smp = module.instruments[v.instrument].data:getSample(math.floor(v._currentOffset))
+	elseif interpolation == 'linear' then
+		-- 1st order interpolation: linear
+		local a = math.floor(v._currentOffset)
+		local b = math.floor(v._currentOffset) % module.instruments[v.instrument].data:getSampleCount()
+		local p = v._currentOffset - math.floor(v._currentOffset)
+		smp = module.instruments[v.instrument].data:getSample(a*p + b*(1.0-p))
+	end
+
 	return smp * v.sampleVolume * (1.0-v.panning), smp * v.sampleVolume * v.panning
 end
 
