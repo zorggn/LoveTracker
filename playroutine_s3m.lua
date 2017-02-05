@@ -652,15 +652,32 @@ routine.update = function(dt)
 	bufferTime = bufferTime + (samplesToMix * samplingPeriod)
 end
 
+local showStats = true
+local renderGraphics = true
+local textCP, textPP, textNP, textStats
+textCP    = love.graphics.newText(love.graphics.getFont())
+textPP    = love.graphics.newText(love.graphics.getFont())
+textNP    = love.graphics.newText(love.graphics.getFont())
+textStats = love.graphics.newText(love.graphics.getFont())
 routine.draw = function()
-	-- TODO: replace all of this with a more comprehendable (and F1 toggleable) text object
-	-- that both has more entries, and is more logically laid out...
+	-- TODO:
+	-- stats should have more entries, and should be more logically laid out...
 	-- Window width should be 2*8 + (numChans * 13 * 8) + ((numChans + 1) * 8)
-	-- Which is rows, channel contents and divisor lines.
+	-- Which is rows, channel contents and divisor lines. (though it should not be wider than the user's screen width)
+
+	if renderGraphics then
 
 	love.graphics.setBackgroundColor(0.1,0.2,0.4)
 
+	textStats:clear()
+
+	local color
+
 	if module then
+
+		textCP:clear()
+		textPP:clear()
+		textNP:clear()
 
 		if not module.patterns[currentPattern] then return end
 
@@ -669,76 +686,92 @@ routine.draw = function()
 
 		for i=0, #module.patterns[currentPattern] do
 			if i ~= currentRow then
-				love.graphics.setColor(0.75,0.75,0.75)
+				color = {0.75,0.75,0.75}
 			else
 				if     currentTick == 0 then
-					love.graphics.setColor(1.0,1.0,1.0)
+					color = {1.0,1.0,1.0}
 				else
-					love.graphics.setColor(0.75,0.75,0.25)
+					color = {0.75,0.75,0.25}
 				end
 			end
-			love.graphics.print(("%02X"):format(i), 0, 84+i*12)
-			love.graphics.print(module.printRow(module.patterns[currentPattern][i], module.chnNum),2*8,84+i*12)
+			textCP:add({color, ("%02X"):format(i)}, 0, 84+i*12)
+			textCP:add({color, module.printRow(module.patterns[currentPattern][i], module.chnNum)}, 2*8, 84+i*12)
 		end
 
 		-- Extra pattern data
 		local temp
 
 		-- Prev.
-		love.graphics.setColor(0.5,0.5,0.25)
+		color = {0.5,0.5,0.25}
 		temp = module.orders[(currentOrder - 1) % #module.orders]
 		if module.patterns[temp] then
 			for i=0, #module.patterns[temp] do
-				love.graphics.print(module.printRow(module.patterns[temp][i], module.chnNum),2*8,84+(i-64)*12)
+				textPP:add({color, module.printRow(module.patterns[temp][i], module.chnNum)}, 2*8, 84+(i-64)*12)
 			end
 		end
 
 		-- Next
-		love.graphics.setColor(0.5,0.25,0.75)
+		color = {0.5,0.25,0.75}
 		temp = module.orders[(currentOrder + 1) % #module.orders]
 		if module.patterns[temp] then
 			for i=0, #module.patterns[temp] do
-				love.graphics.print(module.printRow(module.patterns[temp][i], module.chnNum),2*8,84+(i+64)*12)
+				textNP:add({color, module.printRow(module.patterns[temp][i], module.chnNum)}, 2*8, 84+(i+64)*12)
 			end
 		end
 
+		love.graphics.draw(textPP, 0, 0)
+		love.graphics.draw(textCP, 0, 0)
+		love.graphics.draw(textNP, 0, 0)
+
 		love.graphics.pop()
 
-		love.graphics.setColor(0,0,0.3)
-		love.graphics.rectangle('fill',0,0,64*8,96)
+		if showStats then
 
-		love.graphics.setColor(1,1,1)
+			love.graphics.setColor(0,0,0.3)
+			love.graphics.rectangle('fill',0,0,64*8,96)
 
-		love.graphics.print(("Order:   %d"):format(currentOrder),   42*8, 0)
-		love.graphics.print(("Pattern: %d"):format(currentPattern), 42*8, 12)
-		love.graphics.print(("Row:     %d"):format(currentRow),     42*8, 24)
-		love.graphics.print(("Tick:    %d"):format(currentTick),    42*8, 36)
-		love.graphics.print(("Speed:   %d"):format(speed),          42*8, 48)
-		love.graphics.print(("Tempo:   %d"):format(tempo),          42*8, 60)
-		love.graphics.print(("Timing:  %s"):format(trackingMode),   42*8, 72)
+			love.graphics.setColor(1,1,1)
 
-		love.graphics.print(("/ %d"):format(#module.orders),                   56*8, 0)
-		love.graphics.print(("/ %d"):format(#module.patterns),                 56*8, 12)
-		love.graphics.print(("/ %d"):format(#module.patterns[currentPattern]), 56*8, 24)
-		love.graphics.print(("/ %d"):format(speed-1),                          56*8, 36)
+			textStats:add(("Order:   %d"):format(currentOrder),   42*8, 0)
+			textStats:add(("Pattern: %d"):format(currentPattern), 42*8, 12)
+			textStats:add(("Row:     %d"):format(currentRow),     42*8, 24)
+			textStats:add(("Tick:    %d"):format(currentTick),    42*8, 36)
+			textStats:add(("Speed:   %d"):format(speed),          42*8, 48)
+			textStats:add(("Tempo:   %d"):format(tempo),          42*8, 60)
+			textStats:add(("Timing:  %s"):format(trackingMode),   42*8, 72)
+
+			textStats:add(("/ %d"):format(#module.orders),                   56*8, 0)
+			textStats:add(("/ %d"):format(#module.patterns),                 56*8, 12)
+			textStats:add(("/ %d"):format(#module.patterns[currentPattern]), 56*8, 24)
+			textStats:add(("/ %d"):format(speed-1),                          56*8, 36)
+
+		end
 
 	end
 
-	love.graphics.print(("Samples mixed:       %d (%d)"):format(samplesMixed, math.floor(samplesTotal/bufferSize)), 0, 0)
-	--love.graphics.print(("Playback position:   %d"):format(playbackPos),         0, 12)
-	love.graphics.print(("Time (Buffer-based): %5.5g"):format(bufferTime),       0, 24)
-	love.graphics.print(("Time (Timer-based):  %5.5g"):format(cpuTime),          0, 36)
-	love.graphics.print(("Sampling period:     %g"):format(samplingPeriod*1000), 0, 48)
-	love.graphics.print(("Tick period:         %g"):format(tickPeriod*1000),     0, 60)
-	love.graphics.print(("Actual Tempo:        %g"):format(actualBPM),           0, 72)
+	if showStats then
 
-	love.graphics.print("smps",    32*8, 0)
-	love.graphics.print("ticks",   32*8, 12)
-	love.graphics.print("seconds", 32*8, 24)
-	love.graphics.print("seconds", 32*8, 36)
-	love.graphics.print("ms",      32*8, 48)
-	love.graphics.print("ms",      32*8, 60)
-	love.graphics.print("BPM",     32*8, 72)
+		textStats:add(("Samples mixed:       %d (%d)"):format(samplesMixed, math.floor(samplesTotal/bufferSize)), 0, 0)
+		--love.graphics.print(("Playback position:   %d"):format(playbackPos),         0, 12)
+		textStats:add(("Time (Buffer-based): %5.5g"):format(bufferTime),       0, 24)
+		textStats:add(("Time (Timer-based):  %5.5g"):format(cpuTime),          0, 36)
+		textStats:add(("Sampling period:     %g"):format(samplingPeriod*1000), 0, 48)
+		textStats:add(("Tick period:         %g"):format(tickPeriod*1000),     0, 60)
+		textStats:add(("Actual Tempo:        %g"):format(actualBPM),           0, 72)
+
+		textStats:add("smps",    32*8, 0)
+		textStats:add("ticks",   32*8, 12)
+		textStats:add("seconds", 32*8, 24)
+		textStats:add("seconds", 32*8, 36)
+		textStats:add("ms",      32*8, 48)
+		textStats:add("ms",      32*8, 60)
+		textStats:add("BPM",     32*8, 72)
+
+		love.graphics.draw(textStats, 0, 0)
+
+	end
+
+	end
 
 end
 -------------------------------
@@ -752,6 +785,8 @@ love.keypressed = function(k,s)
 			voices[tonumber(s)].muted = not voices[tonumber(s)].muted
 		end
 	end
+	if s == 'f1' then showStats = not showStats end
+	if s == 'f2' then renderGraphics = not renderGraphics end
 end
 
 --------------
