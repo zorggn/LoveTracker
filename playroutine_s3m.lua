@@ -657,7 +657,73 @@ routine.draw = function()
 	-- that both has more entries, and is more logically laid out...
 	-- Window width should be 2*8 + (numChans * 13 * 8) + ((numChans + 1) * 8)
 	-- Which is rows, channel contents and divisor lines.
-	love.graphics.setColor(1,1,1)
+
+	love.graphics.setBackgroundColor(0.1,0.2,0.4)
+
+	if module then
+
+		if not module.patterns[currentPattern] then return end
+
+		love.graphics.push('all')
+		love.graphics.translate(0, 300+(-12*currentRow))
+
+		for i=0, #module.patterns[currentPattern] do
+			if i ~= currentRow then
+				love.graphics.setColor(0.75,0.75,0.75)
+			else
+				if     currentTick == 0 then
+					love.graphics.setColor(1.0,1.0,1.0)
+				else
+					love.graphics.setColor(0.75,0.75,0.25)
+				end
+			end
+			love.graphics.print(("%02X"):format(i), 0, 84+i*12)
+			love.graphics.print(module.printRow(module.patterns[currentPattern][i], module.chnNum),2*8,84+i*12)
+		end
+
+		-- Extra pattern data
+		local temp
+
+		-- Prev.
+		love.graphics.setColor(0.5,0.5,0.25)
+		temp = module.orders[(currentOrder - 1) % #module.orders]
+		if module.patterns[temp] then
+			for i=0, #module.patterns[temp] do
+				love.graphics.print(module.printRow(module.patterns[temp][i], module.chnNum),2*8,84+(i-64)*12)
+			end
+		end
+
+		-- Next
+		love.graphics.setColor(0.5,0.25,0.75)
+		temp = module.orders[(currentOrder + 1) % #module.orders]
+		if module.patterns[temp] then
+			for i=0, #module.patterns[temp] do
+				love.graphics.print(module.printRow(module.patterns[temp][i], module.chnNum),2*8,84+(i+64)*12)
+			end
+		end
+
+		love.graphics.pop()
+
+		love.graphics.setColor(0,0,0.3)
+		love.graphics.rectangle('fill',0,0,64*8,96)
+
+		love.graphics.setColor(1,1,1)
+
+		love.graphics.print(("Order:   %d"):format(currentOrder),   42*8, 0)
+		love.graphics.print(("Pattern: %d"):format(currentPattern), 42*8, 12)
+		love.graphics.print(("Row:     %d"):format(currentRow),     42*8, 24)
+		love.graphics.print(("Tick:    %d"):format(currentTick),    42*8, 36)
+		love.graphics.print(("Speed:   %d"):format(speed),          42*8, 48)
+		love.graphics.print(("Tempo:   %d"):format(tempo),          42*8, 60)
+		love.graphics.print(("Timing:  %s"):format(trackingMode),   42*8, 72)
+
+		love.graphics.print(("/ %d"):format(#module.orders),                   56*8, 0)
+		love.graphics.print(("/ %d"):format(#module.patterns),                 56*8, 12)
+		love.graphics.print(("/ %d"):format(#module.patterns[currentPattern]), 56*8, 24)
+		love.graphics.print(("/ %d"):format(speed-1),                          56*8, 36)
+
+	end
+
 	love.graphics.print(("Samples mixed:       %d (%d)"):format(samplesMixed, math.floor(samplesTotal/bufferSize)), 0, 0)
 	--love.graphics.print(("Playback position:   %d"):format(playbackPos),         0, 12)
 	love.graphics.print(("Time (Buffer-based): %5.5g"):format(bufferTime),       0, 24)
@@ -674,43 +740,6 @@ routine.draw = function()
 	love.graphics.print("ms",      32*8, 60)
 	love.graphics.print("BPM",     32*8, 72)
 
-	if module then
-
-		love.graphics.print(("Order:   %d"):format(currentOrder),   42*8, 0)
-		love.graphics.print(("Pattern: %d"):format(currentPattern), 42*8, 12)
-		love.graphics.print(("Row:     %d"):format(currentRow),     42*8, 24)
-		love.graphics.print(("Tick:    %d"):format(currentTick),    42*8, 36)
-		love.graphics.print(("Speed:   %d"):format(speed),          42*8, 48)
-		love.graphics.print(("Tempo:   %d"):format(tempo),          42*8, 60)
-		love.graphics.print(("Timing:  %s"):format(trackingMode),   42*8, 72)
-
-		love.graphics.print(("/ %d"):format(#module.orders),                   56*8, 0)
-		love.graphics.print(("/ %d"):format(#module.patterns),                 56*8, 12)
-		love.graphics.print(("/ %d"):format(#module.patterns[currentPattern]), 56*8, 24)
-		love.graphics.print(("/ %d"):format(speed-1),                          56*8, 36)
-
-		if not module.patterns[currentPattern] then return end
-
-		love.graphics.push('all')
-		love.graphics.translate(0, 300+(-12*currentRow))
-
-		for i=0, #module.patterns[currentPattern] do
-			if i ~= currentRow then
-				love.graphics.setColor(0.5,0.5,0.5)
-			else
-				if     currentTick == 0 then
-					love.graphics.setColor(1.0,1.0,1.0)
-				else
-					love.graphics.setColor(0.75,0.75,0.25)
-				end
-			end
-			love.graphics.print(("%02X"):format(i), 0, 84+i*12)
-			love.graphics.print(module.printRow(module.patterns[currentPattern][i], module.chnNum),2*8,84+i*12)
-		end
-
-		love.graphics.pop()
-
-	end
 end
 -------------------------------
 
