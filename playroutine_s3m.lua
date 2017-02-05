@@ -612,7 +612,7 @@ routine.update = function(dt)
 	if trackingMode == 'cpu' then
 		-- This version is guaranteed to keep up, but
 		-- sadly it's prone to hiccups.
-		samplesToMix = math.floor(dt / samplingPeriod)
+		samplesToMix = math.ceil(dt / samplingPeriod)
 	elseif trackingMode == 'buffer' then
 		-- This version should be the better one;
 		-- Try rendering as many smp-s as there are in one tick.
