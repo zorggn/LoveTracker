@@ -17,7 +17,7 @@ local channelCount   =     2                 -- channels
 -- References: Audio Parameters
 
 local bufferOffset   =    0                  -- samplepoints
-local bufferSize     = 1024                  -- samplepoints
+local bufferSize     = 2048                  -- samplepoints
 local buffer         = love.sound.newSoundData(
 					bufferSize,
 					samplingRate, 
@@ -64,7 +64,7 @@ local actualBPM                              -- beats per minute (This one is th
 local cpuTime        = 0.0                   -- seconds (based on love.timer)
 local bufferTime     = 0.0                   -- seconds (based on processed smp-s)
 
-local trackingMode   = 'buffer'              -- cpu or buffer based playback cursor positioning
+local trackingMode   = 'cpu'              -- cpu or buffer based playback cursor positioning
 local tickAccum      = 0                     -- seconds
 local samplesMixed   = 0                     -- smp (samples mixed current frame)
 local samplesTotal   = 0                     -- smp (samples mixed total)
@@ -262,7 +262,10 @@ routine.load = function(mod)
 
 end
 
+local FUCKB, FUCKC = 0.0, 0.0
 routine.update = function(dt)
+
+	FUCKC = dt
 
 	-- This always happens with the function call.
 	cpuTime = cpuTime + dt
@@ -276,11 +279,12 @@ routine.update = function(dt)
 	if trackingMode == 'cpu' then
 		tickAccum = tickAccum + dt
 	elseif trackingMode == 'buffer' then
-		tickAccum = tickAccum + (samplingPeriod * samplesMixed)
+		tickAccum = tickAccum + (samplesMixed * samplingPeriod)
 	end
 
 	-- If we've accumulated enough to reach a new tick, process it.
 	if tickAccum >= tickPeriod then
+	--while tickAccum >= tickPeriod do -- No, we're not skipping any ticks under any circumstances.
 		tickAccum = tickAccum - tickPeriod
 
 		-- Skip marker and empty patterns (254, 255).
@@ -604,19 +608,21 @@ routine.update = function(dt)
 	end
 
 	-- Render samplepoint(s).
-	-- Code doesn't deal with stereo, for now.
 	local samplesToMix
 	if trackingMode == 'cpu' then
 		-- This version is guaranteed to keep up, but
 		-- sadly it's prone to hiccups.
-		samplesToMix = math.ceil(dt / samplingPeriod)
+		samplesToMix = math.floor(dt / samplingPeriod)
 	elseif trackingMode == 'buffer' then
 		-- This version should be the better one;
 		-- Try rendering as many smp-s as there are in one tick.
-		samplesToMix = math.min(math.floor(tickPeriod / samplingPeriod), buffer:getSampleCount())
-		--samplesToMix = math.floor(1 / tickPeriod) -- maybe this?
+		--samplesToMix = math.min(math.floor(tickPeriod / samplingPeriod), buffer:getSampleCount())
+		--samplesToMix = math.floor(1 / tickPeriod)
+
+		-- This one seems to work, when the samplecount is less (or equal?) than the buffer's size.
+		samplesToMix = math.floor(tickPeriod / samplingPeriod)
 	end
-	for i=0, samplesToMix do
+	for i=0, samplesToMix-1 do
 
 		-- Render each voice, and mix them together
 		-- |output| <= 1.0 * N -> Normalize to [-1,1]
@@ -646,10 +652,12 @@ routine.update = function(dt)
 	end
 
 	samplesMixed = samplesToMix
-	samplesTotal = samplesTotal + samplesToMix
+	samplesTotal = samplesTotal + samplesMixed
 
 	-- How much time elapsed with regards to processed smp-s.
-	bufferTime = bufferTime + (samplesToMix * samplingPeriod)
+	bufferTime = bufferTime + (samplesMixed * samplingPeriod)
+
+	FUCKB = (samplesMixed * samplingPeriod)
 end
 
 local showStats = true
@@ -753,6 +761,7 @@ routine.draw = function()
 
 		textStats:add(("Samples mixed:       %d (%d)"):format(samplesMixed, math.floor(samplesTotal/bufferSize)), 0, 0)
 		--love.graphics.print(("Playback position:   %d"):format(playbackPos),         0, 12)
+		love.graphics.print(("Latency:             %5.5g"):format((FUCKC-FUCKB)*1000),     0, 12)
 		textStats:add(("Time (Buffer-based): %5.5g"):format(bufferTime),       0, 24)
 		textStats:add(("Time (Timer-based):  %5.5g"):format(cpuTime),          0, 36)
 		textStats:add(("Sampling period:     %g"):format(samplingPeriod*1000), 0, 48)
@@ -760,7 +769,8 @@ routine.draw = function()
 		textStats:add(("Actual Tempo:        %g"):format(actualBPM),           0, 72)
 
 		textStats:add("smps",    32*8, 0)
-		textStats:add("ticks",   32*8, 12)
+		--textStats:add("ticks",   32*8, 12)
+		textStats:add("ms",   32*8, 12)
 		textStats:add("seconds", 32*8, 24)
 		textStats:add("seconds", 32*8, 36)
 		textStats:add("ms",      32*8, 48)
