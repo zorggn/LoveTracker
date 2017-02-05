@@ -210,12 +210,13 @@ function load_s3m(file)
 	-- 0x1300 - ST3.00 - volslides happen on every frame, not just non-T0 frames!
 	-- 0x1301, 03, 20 -- ST3.01, 03, 20 - otherwise.
 	local cwtv = util.ansi2number(file:read(2), 'LE')
-	log("%X",cwtv)
+	log("Created With/Tracker Version: %X",cwtv)
 	if  cwtv == 0x1300 then structure.version = '3.00' elseif
 		cwtv == 0x1301 then structure.version = '3.01' elseif
 		cwtv == 0x1303 then structure.version = '3.03' elseif
+		cwtv == 0x1310 then structure.version = '3.10' elseif
 		cwtv == 0x1320 then structure.version = '3.20' else
-		structure.version = 'unknown'
+		structure.version = '?'
 	end
 
 	-- 0x2A: Sample Format -- 1: signed, 2: unsigned (2 is the usual case)
@@ -291,7 +292,7 @@ function load_s3m(file)
 		-- Alternatively, OPL channels go from 8 to 30. (9 L melo, 9 R melo, 5 drum), and 128 is the disabled flag.
 		if n < 16 then
 			structure.channelMap[i] = pos
-			log("    Channel %d mapped to %d.", i, pos)
+			log("    Channel %d mapped to %d. (type %d)", i, pos, n)
 			pos = pos + 1
 			-- Not panning levels, only "orientation"...
 			if n <= 7 then
