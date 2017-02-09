@@ -792,6 +792,8 @@ love.keypressed = function(k,s)
 		if trackingMode == 'buffer' then trackingMode = 'cpu' else trackingMode = 'buffer' end
 	end
 	if tonumber(s) then
+	if tonumber(s) or tonumber(k) then
+		if k == '0' then s = '0' end
 		if voices[tonumber(s)] then
 			voices[tonumber(s)].muted = not voices[tonumber(s)].muted
 		end
