@@ -791,7 +791,9 @@ love.keypressed = function(k,s)
 	if s == 't' then
 		if trackingMode == 'buffer' then trackingMode = 'cpu' else trackingMode = 'buffer' end
 	end
-	if tonumber(s) then
+	if s == 'i' then
+		if interpolation == 'nearest' then interpolation = 'linear' else interpolation = 'nearest' end
+	end
 	if tonumber(s) or tonumber(k) then
 		if k == '0' then s = '0' end
 		if voices[tonumber(s)] then
