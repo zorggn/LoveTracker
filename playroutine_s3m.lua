@@ -205,6 +205,7 @@ local newVoice = function()
 	v.sampleVolume  = 1.0 -- [ 0, 1]
 	v.sampleOffset  = 0.0 -- [ 0, 65280] Oxx
 
+	v.slideToNote = 0
 	v.volSlide      = 0
 	v.portamento    = 0
 
