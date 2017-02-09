@@ -95,7 +95,7 @@ C4speedFinetunes = {
 
 defaultC4speed = C4speedFinetunes[ 0x08 ]
 
-fourthOctavePeriod = {1712, 1616, 1524, 1440,1356,1280,1208,1140,1076,1016,0960,0907}
+fourthOctavePeriod = {1712, 1616, 1524, 1440,1356,1280,1208,1140,1076,1016,960,907}
 
 baseClock  = defaultC4speed * fourthOctavePeriod[1]
 fixedClock = baseClock / samplingRate
