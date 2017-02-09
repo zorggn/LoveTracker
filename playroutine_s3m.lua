@@ -206,8 +206,10 @@ local newVoice = function()
 	v.sampleOffset  = 0.0 -- [ 0, 65280] Oxx
 
 	v.slideToNote = 0
+	-- apparently the effect memories have 3 slots; portamento, vibrato and everything else.
 	v.volSlide      = 0
 	v.portamento    = 0
+	v.vibrato       = 0
 
 	return v
 end
