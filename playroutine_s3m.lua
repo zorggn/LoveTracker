@@ -121,6 +121,15 @@ end
 
 local voice = {}
 
+voice.stats = function(v)
+	return v.notePeriod,
+	v.instrument,
+	v.sampleVolume,
+	v.panning,
+	v._currentOffset,
+	v.notePeriod * (defaultC4speed / module.instruments[v.instrument].c4speed)
+end
+
 voice.setNote = function(v, note)
 	v.notePeriod = notePeriod[note]
 end
@@ -757,6 +766,19 @@ routine.draw = function()
 			textStats:add(("/ %d"):format(speed-1),                          56*8, 36)
 
 		end
+
+		-- Experimental realtime "voice properities" "matrix"
+		love.graphics.push()
+		love.graphics.translate(64*8,0)
+		love.graphics.setColor(0,0,0.3)
+		love.graphics.rectangle('fill',0,0,30*8,(#voices+2)*12)
+		love.graphics.setColor(1,1,1)
+		love.graphics.print("note fixd ins vol pan tnoffset", 0, 0)
+		for ch=0, #voices do
+			local n,i,v,p,co,cp = voices[ch]:stats() -- period, inst, vol, panning, curroffs, currPeriod
+			love.graphics.print(("%4X %4X %2X  %2X  %2X  %8X"):format(n,cp,i,v*64,p*15,co), 0, 12*(ch+1))
+		end
+		love.graphics.pop()
 
 	end
 
