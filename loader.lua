@@ -10,6 +10,7 @@ local loader = {
 	['s3m'] = require('load_s3m'),
 	--['xm']  = require('load_xm'),
 	--['it']  = require('load_it'),
+	['org'] = require('load_org')
 }
 
 -- The loader
