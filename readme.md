@@ -1,4 +1,4 @@
-A module player (for now) written with the LÖVE framework.
+A module player (for now) written with the LÃ–VE framework.
 ----------------------------------------------------------
 
 ### Info
@@ -6,7 +6,7 @@ A module player (for now) written with the LÖVE framework.
 - S3M module parsing and playback mostly works.
 - Organya parsing and playback mostly works.
 
-- Needs a 0.11 löve nightly.
+- Needs a 0.11 lÃ¶ve nightly.
 
 - Requires this font (unless you edit out a line): http://www.fixedsysexcelsior.com/
 
