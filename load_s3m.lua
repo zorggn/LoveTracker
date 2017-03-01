@@ -134,7 +134,7 @@ local printp_s3m = function(row, nchan, console)
 	end
 end
 
-function load_s3m(file)
+local load_s3m = function(file)
 
 	-- The table where all the data will live.
 	local structure = {}
