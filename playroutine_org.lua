@@ -475,7 +475,9 @@ routine.update = function(dt)
 				smpL, smpR = smpL + L, smpR + (R or 0.0)
 			end
 		end
-		smpL, smpR = smpL / routine.normalizer, smpR / routine.normalizer
+		--smpL, smpR = smpL / routine.normalizer, smpR / routine.normalizer
+		local ratio = math.sqrt(10^((routine.normalizer-1)/10))
+		smpL, smpR = smpL / ratio, smpR / ratio
 
 		Buffer.data:setSample(Buffer.offset  , smpL)
 		Buffer.data:setSample(Buffer.offset+1, smpR)

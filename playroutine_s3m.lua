@@ -649,7 +649,9 @@ routine.update = function(dt)
 		end
 
 		--smpL, smpR = smpL / 32.0, smpR / 32.0
-		smpL, smpR = smpL / module.chnNum, smpR / module.chnNum
+		--smpL, smpR = smpL / module.chnNum, smpR / module.chnNum
+		local ratio = math.sqrt(10^((module.chnNum-1)/10))
+		smpL, smpR = smpL / ratio, smpR / ratio
 
 		buffer:setSample(bufferOffset  , smpL)
 		buffer:setSample(bufferOffset+1, smpR)
