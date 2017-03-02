@@ -125,12 +125,17 @@ end
 Voice.setLength = function(v, len)
 	-- Don't process continuations if the previous note wasn't as long...
 	if v.note == 0xFF --[[ and v.ticksLeft == 0 --]] then return end
-	-- if the voice is pizzicated, we need to set the lengths a bit differently
-	if v.pizzicato == 0 then
-		v.ticksLeft = len -- ticks...
-	else
-		v.ticksLeft = pizzicato(v.octave) -- samplepoints... not the best solution, but it should work.
-	end
+	--if v.type == 'melodic' then
+		-- if the voice is pizzicated, we need to set the lengths a bit differently
+		if v.pizzicato == 0 then
+			v.ticksLeft = len -- ticks...
+		else
+			v.ticksLeft = pizzicato(v.octave) -- samplepoints... not the best solution, but it should work.
+		end
+	--else
+		-- Apparently, perc channels ignore the length fields, and just play the sample naively, retriggering on a new note.
+		--v.ticksLeft = 255
+	--end
 end
 
 Voice.setVolume = function(v, vol)
@@ -153,7 +158,15 @@ Voice.process = function(v)
 	if not v.processed  then return 0.0, 0.0 end
 	if v.frequency == 0 then return 0.0, 0.0 end
 	if v.octave    == 0 then return 0.0, 0.0 end
-	if v.ticksLeft == 0 then return 0.0, 0.0 end
+	if v.ticksLeft == 0 then
+		if v.type == 'melodic' then
+			return 0.0, 0.0
+		else
+			if v.currentOffset == 0 then
+				return 0.0, 0.0
+			end
+		end
+	end
 	local smp
 	-- Get samplepoint
 	if v.interpolation == 'nearest' then
@@ -406,9 +419,9 @@ routine.update = function(dt)
 				if voice.ticksLeft > 0 then
 					voice.ticksLeft = voice.ticksLeft - 1
 				end
-				if voice.ticksLeft == 0 and voice.type ~= 'melodic' then
-					voice.currentOffset = 0
-				end
+				--if voice.ticksLeft == 0 and voice.type ~= 'melodic' then
+				--	voice.currentOffset = 0
+				--end
 			end
 		end
 
