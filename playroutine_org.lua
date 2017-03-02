@@ -353,6 +353,7 @@ routine.load = function(mod)
 
 	-- Set timings.
 	routine.tickPeriod = Module.tempo / 1000 -- ms, converted to seconds
+	routine.tempo = 60000 / (Module.tempo * Module.beatsPerStep)
 
 	-- Set up volume normalizer.
 	routine.normalizer = 0.0
@@ -496,17 +497,18 @@ routine.draw = function()
 	love.graphics.setBackgroundColor(0.2,0.2,0.3)
 
 	love.graphics.setColor(0.1,0.1,0.2)
-	love.graphics.rectangle('fill',0,0,10*8,48)
+	love.graphics.rectangle('fill',0,0,30*8,60)
 
 	love.graphics.setColor(1,1,1)
-	love.graphics.print(("tick: %d"):format(routine.currentTick),0,0)
-	love.graphics.print(("step: %d"):format(routine.currentStep),0,12)
-	love.graphics.print(("beat: %d"):format(routine.currentBeat),0,24)
-	love.graphics.print(("meas: %d"):format(routine.currentMeasure),0,36)
+	love.graphics.print(("tick:    %8X"):format(routine.currentTick),0,0)
+	love.graphics.print(("step:         %3d"):format(routine.currentStep),0,12)
+	love.graphics.print(("beat:         %3d"):format(routine.currentBeat),0,24)
+	love.graphics.print(("measure:     %4d"):format(routine.currentMeasure),0,36)
+	love.graphics.print(("tempo:      %5d BPM"):format(routine.tempo),0,48)
 
 	-- Experimental realtime "voice properities" "matrix"
 	love.graphics.push()
-	love.graphics.translate(11*8,0)
+	love.graphics.translate(31*8,0)
 	love.graphics.setColor(0.1,0.1,0.2)
 	love.graphics.rectangle('fill',0,0,48*8,17*12)
 	love.graphics.setColor(1,1,1)
