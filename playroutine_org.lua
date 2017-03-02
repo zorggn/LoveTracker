@@ -423,7 +423,7 @@ routine.update = function(dt)
 				local voice = routine.voices[v]
 				if voice.noteCount > 0 then
 					local event = 0
-					while event <= Module.loopEnd do
+					while event < voice.noteCount do
 						if Module.song[v][event].position >= Module.loopStart then
 							break
 						end
