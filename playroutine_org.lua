@@ -124,7 +124,7 @@ end
 
 Voice.setLength = function(v, len)
 	-- Don't process continuations if the previous note wasn't as long...
-	if v.note == 0xFF and v.ticksLeft == 0 then return end
+	if v.note == 0xFF --[[ and v.ticksLeft == 0 --]] then return end
 	-- if the voice is pizzicated, we need to set the lengths a bit differently
 	if v.pizzicato == 0 then
 		v.ticksLeft = len -- ticks...
@@ -392,22 +392,22 @@ routine.update = function(dt)
 				-- set data
 				voice.position = event.position
 				voice:setNote(event.pitch)
-				voice:setLength(event.length)
+				voice:setLength(event.length+1)
 				voice:setVolume(event.volume)
 				voice:setPanning(event.panning)
 				-- increment event ctr
 				voice.currentEvent = voice.currentEvent + 1
-			else
-				-- decrease the length of the note if one's playing
-				-- but only if the track is not set to pizzicato mode
-				-- since that's set in the rendering code...
-				if voice.pizzicato == 0 then
-					if voice.ticksLeft > 0 then
-						voice.ticksLeft = voice.ticksLeft - 1
-					end
-					if voice.ticksLeft == 0 and voice.type ~= 'melodic' then
-						voice.currentOffset = 0
-					end
+			end
+
+			-- decrease the length of the note if one's playing
+			-- but only if the track is not set to pizzicato mode
+			-- since that's set in the rendering code...
+			if voice.pizzicato == 0 then
+				if voice.ticksLeft > 0 then
+					voice.ticksLeft = voice.ticksLeft - 1
+				end
+				if voice.ticksLeft == 0 and voice.type ~= 'melodic' then
+					voice.currentOffset = 0
 				end
 			end
 		end
