@@ -4,7 +4,7 @@
 -- See doc/orgspecs_v1_1.txt for references.
 
 local log = function(str,...)
-	print(string.format(str,...))
+	--print(string.format(str,...))
 end
 local util = require('util')
 
