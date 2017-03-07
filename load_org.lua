@@ -58,9 +58,16 @@ local load_org = function(file)
 
 	log("Format string: %s", formatstring)
 
-	structure.version = tonumber(formatstring:sub(-2)) -- Last two characters.
+	if formatstring:sub(1,4) ~= "Org-" then return false end
 
-	log("Format version: %d\n", structure.version)
+	structure.version = formatstring:sub(-2) -- Last two characters.
+
+	log("Format version: %s\n", structure.version)
+
+	local allowed = {['01'] = true, ['02'] = true, ['03'] = true}
+	if not allowed[structure.version] then return false end
+
+	structure.version = tonumber(structure.version)
 
 	-- Tempo in milliseconds.
 
