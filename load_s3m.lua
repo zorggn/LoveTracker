@@ -136,6 +136,7 @@ end
 
 local load_s3m = function(file)
 
+
 	-- The table where all the data will live.
 	local structure = {}
 
