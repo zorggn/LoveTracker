@@ -136,6 +136,7 @@ end
 
 local load_s3m = function(file)
 
+	log("-- ScreamTracker3 S3M loader --\n")
 
 	-- The table where all the data will live.
 	local structure = {}
