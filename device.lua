@@ -87,11 +87,11 @@ local new = function(samplingRate, bitDepth, channelCount, bufferSize,
 	dev.channelCount = channelCount or     2 -- channels
 	dev.bufferSize   = bufferSize   or  2048 -- smp
 
-	dev.renderMode   = renderMode   or 'Buffer'
+	dev.renderMode   = renderMode   or 'CPU'
 	dev.trackingMode = trackingMode or 'Buffer'
 
-	dev.resetBuffer()
-	dev.resetSource()
+	dev:resetBuffer()
+	dev:resetSource()
 
 	return dev
 end
