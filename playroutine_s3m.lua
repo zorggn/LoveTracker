@@ -514,7 +514,20 @@ routine.update = function(dt)
 							-- Probably should clamp period values too...
 						elseif effect == 'F' then
 							if voices[ch].portamento < 0xE0 then
+
+								if ch == 7 then print(currentTick, voices[ch].notePeriod, voices[ch].portamento, voices[ch].notePeriod - voices[ch].portamento * 4) end
+
 								voices[ch].notePeriod = voices[ch].notePeriod - voices[ch].portamento * 4
+								-- "2ND_PM.S3M ptrn 17 test case (openmpt):"
+								-- A-5 + 37 (* (3-1) ticks) => D#6
+								-- 508 - (37*2*4) = 360
+								-- 508 - 296 = 212 (C-6)
+								--
+								-- What really happens:
+								-- 1076 (G#4) - 148 (37 * 4) => 928 - 148 (37 * 4) -> 780 (D-5)
+
+								-- The issue may be with that we should apply these AFTER the
+								-- defaultC4 - instrumentC4 normalization...
 							end
 							-- Probably should clamp period values too...
 						elseif effect == 'G' then

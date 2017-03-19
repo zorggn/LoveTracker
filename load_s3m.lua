@@ -4,7 +4,7 @@
 -- See doc/s3m.txt for references.
 
 local log = function(str,...)
-	--print(string.format(str,...))
+	print(string.format(str,...))
 end
 local util = require('util')
 
@@ -630,7 +630,7 @@ local load_s3m = function(file)
 			pattern[j] = row
 
 			-- This is for show.
-			printp_s3m(row, structure.chnNum, true)
+			--printp_s3m(row, structure.chnNum, true)
 
 		end -- rows
 
