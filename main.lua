@@ -91,7 +91,7 @@ function love.filedropped(file)
 	module = loader(file)
 
 	-- Init playroutine with one fitting the module.
-	routine = require("playroutine_" .. module.fileType)
+	routine = require("play_" .. module.fileType)
 
 	-- Play the module.
 	routine.load(module)
