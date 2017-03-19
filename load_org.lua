@@ -1,182 +1,192 @@
--- Organya "ORG" not-quite-module file importer/parser
+-- Organya "Org" importer/parser
 -- by zorg @ 2017 § ISC
+-- Original format by Pixel (天谷 大輔 〜 Amaya Daisuke)
 
--- See doc/orgspecs_v1_1.txt for references.
+-- Note: The given per-track event format is not suited for editing, since each
+--       edit could potentially reorder the events; nevertheless, for a simple
+--       playback routine, it is sufficient.
 
-local log = function(str,...)
-	--print(string.format(str,...))
-end
-local util = require('util')
-
--- The structure of the file kept in memory:
 --[[
-
-	string - fileType       -- The extension of the file. (Added in loader.lua)
-	string - moduleType     -- What subtype this file is;
-	                        -- For org files, it'll always be "Organya Org-", appended by a two-character version number.
-	number - version        -- The version number.
-
-	number - Tempo          -- Tickrate in ms
-	number - Steps/Bar      --
-	number - Beats/Step     --
-	number - Loop beginning --
-	number - Loop End       --
-
-	table  - Instruments    -- A table of 16 instrument properity definitions; first 8 melodic, last 8 percussive.
-		number  - Pitch
-		number  - Instrument
-		boolean - Pizzicato
-		number  - Number of Notes
-
-	table - Song            -- A table containing the song data.
-		table - Track
-			table - position events
-			table - pitch events
-			table - length events
-			table - volume events
-			table - pan events
-
-	-- Note that this is the format the serialized files have; it might make more sense to store the data a bit differently in memory...
-
+	Structure definition:
+		version            - 1,2,3
+		tickRate           - 1..2000 ms
+		beatPerBar         - beats
+		tickPerBeat        - ticks
+		loopStart          - 0x0..0xFFFFFFFF tick
+		loopEnd            - 0x0..0xFFFFFFFF tick
+		tempo              - calculated, BPM
+		eventSum           - events
+		track[]            - 0..15
+			finetune       - 100..1900
+			instrument     - 0..99 (melodic) or 0..11 (percussive)
+			pizzicato      - 0,1
+			eventCount     - 0..4096 events
+		event[]            - 0..15
+			firstLoopEvent - calculated, tick
+			[]             - eventCount (per-track, see above)
+				position   - 0x00........0xFFFFFFFF, tick
+				pitch      - 0x00..0x2D..0x5F, 0xFF continue
+				length     - 0x00........0xFE, 0xFF continue, ticks
+				volume     - 0x00..0xC8..0xFE, 0xFF continue
+				panning    - 0x00..0x06..0x0C, 0xFF continue
 --]]
 
+local util = require('util')
+local log = function(str,...) io.write(string.format(str,...)) end
+
+local definedTimeSignatures = {
+	['4/4'] = true, ['3/4'] = true, ['4/3'] = true, ['3/3'] = true,
+	['6/4'] = true, ['6/3'] = true, ['2/4'] = true, ['8/4'] = true,
+}
+
+local errorString = {
+	"File header did not start with 'Org-'.",
+	"Unsupported format version.",
+	"Early end-of-file in header.",
+	"Early end-of-file in track properities.",
+	"Early end-of-file in event list.",
+}
+
 local load_org = function(file)
-
-	log("-- Organya ORG loader --\n")
-
-	-- The table where all the data will live.
+	log("--  Organya ORG loader  --\n\n")
 	local structure = {}
-
-	-- Here on through comes the fun part!
 	file:open('r')
 
-	---------------------------------------------------------------------------
-	-- Read in global info from header
-	---------------------------------------------------------------------------
 
-	-- Format version.
 
 	local formatstring = file:read(6)
-
-	log("Format string: %s", formatstring)
-
-	if formatstring:sub(1,4) ~= "Org-" then return false end
-
-	structure.version = formatstring:sub(-2) -- Last two characters.
-
-	log("Format version: %s\n", structure.version)
+	if formatstring:sub(1,4) ~= "Org-" then return false, errorString[1] end
+	structure.version  = formatstring:sub(-2)
+	log("Format string: %s\n", formatstring)
 
 	local allowed = {['01'] = true, ['02'] = true, ['03'] = true}
-	if not allowed[structure.version] then return false end
-
+	if not allowed[structure.version] then return false, errorString[2] end
 	structure.version = tonumber(structure.version)
+	log("Format version %02d\n", structure.version)
 
-	-- Tempo in milliseconds.
+	local v,n
 
-	structure.tempo = util.ansi2number(file:read(2), 'LE')
+	v,n = file:read(2); if n ~= 2 then return false, errorString[3] end
+	structure.tickRate    = util.bin2number(v, 'LE')
+	log("Tick rate:   %4d ms\n", structure.tickRate)
 
-	log("Tempo (ms): %d", structure.tempo)
+	v,n = file:read(1); if n ~= 1 then return false, errorString[3] end
+	structure.beatPerBar  = string.byte(v)
+	log("Steps/Bar:    %3d\n",   structure.beatPerBar)
 
-	-- Steps per Bar & Beats per Step
+	v,n = file:read(1); if n ~= 1 then return false, errorString[3] end
+	structure.tickPerBeat = string.byte(v)
+	log("Ticks/Step:   %3d\n",   structure.tickPerBeat)
 
-	structure.stepsPerBar  = string.byte(file:read(1))
-	structure.beatsPerStep = string.byte(file:read(1))
-
-	-- 92 ms -> 108 BMP (4/6)
-	-- 1 beat == 92 ms/beat
-	-- 6 beats / step
-	-- 1 step == 92 ms * 6 = 552 ms/step
-	-- ^-1 -> 1/552 step/ms
-	-- 60000 ms/min / 552 step/ms ~ 108(.69) BPM
-
-	log("BPM (Calculated): %f\n", 60000 / (structure.tempo * structure.beatsPerStep))
-
-	log("Steps per Bar  (Beat in OrgMaker): %d", structure.stepsPerBar)
-	log("Beats per Step (Step in OrgMaker): %d", structure.beatsPerStep)
-
-	log("")
-
-	-- Loop beginning and end
-
-	structure.loopStart = util.ansi2number(file:read(4), 'LE')
-	structure.loopEnd   = util.ansi2number(file:read(4), 'LE')
-
-	log("Loop beginning (steps/bars): %5d, %3d", structure.loopStart, structure.loopStart /structure.stepsPerBar/structure.beatsPerStep)
-	log("Loop end       (steps/bars): %5d, %3d", structure.loopEnd,   structure.loopEnd   /structure.stepsPerBar/structure.beatsPerStep)
-
-	---------------------------------------------------------------------------
-	-- Read in per-track instrument info from header
-	---------------------------------------------------------------------------
-
-	log("")
-
-	local noteCountSum = 0
-
-	structure.instruments = {}
-
-	for i=0, 15 do
-
-		local inst = {}
-
-		inst.finetune   = util.ansi2number(file:read(2), 'LE')
-		inst.instrument = string.byte(file:read(1))
-		inst.pizzicato  = string.byte(file:read(1))
-		inst.noteCount  = util.ansi2number(file:read(2), 'LE')
-
-		noteCountSum = noteCountSum + inst.noteCount
-
-		log("Instrument %2d (%s) finetune: %4d instrument: %2d pizzicato: %1d note count: %4d remaining: %4d",
-			i, (i<8 and "Melo." or "Perc."), inst.finetune, inst.instrument, inst.pizzicato, inst.noteCount, 4096-inst.noteCount)
-
-		structure.instruments[i] = inst
+	if not definedTimeSignatures[('%d/%d'):format(
+		structure.tickPerBeat, structure.beatPerBar)]
+	then
+		log("Time signature not one of the predefined ones; file probably " ..
+			"not made with OrgMaker.\n")
 	end
 
-	log("Total note count: %5d remaining: %5d", noteCountSum, 65536 - noteCountSum)
+	v,n = file:read(4); if n ~= 4 then return false, errorString[3] end
+	structure.loopStart   = util.bin2number(v, 'LE')
+	log("Loop start: %5d steps (%3d bars)\n", structure.loopStart,
+		structure.loopStart / structure.beatPerBar / structure.tickPerBeat)
 
-	---------------------------------------------------------------------------
-	-- Read in song data
-	---------------------------------------------------------------------------
+	v,n = file:read(4); if n ~= 4 then return false, errorString[3] end
+	structure.loopEnd     = util.bin2number(v, 'LE')
+	log("Loop end:   %5d steps (%3d bars)\n", structure.loopEnd,
+		structure.loopEnd   / structure.beatPerBar / structure.tickPerBeat)
 
-	-- Thankfully we don't need to seek anywhere, since the data is neatly laid out sequentially... more or less.
+	if  ((structure.loopStart / structure.beatPerBar / structure.tickPerBeat)
+		% 1.0 ~= 0.0) or
+		((structure.loopEnd   / structure.beatPerBar / structure.tickPerBeat)
+		% 1.0 ~= 0.0) 
+	then
+		log("One or both loop points not bar-aligned; file probably " ..
+			"not made with OrgMaker.\n")
+	end
 
-	log("")
+	structure.tempo       = 6e4 / (structure.tickRate * structure.tickPerBeat)
+	log("Tempo: %9.4f BPM (calculated)\n\n", structure.tempo)
 
-	structure.song = {}
 
-	-- Only for the byte-sized parameters.
-	local fields = {'pitch', 'length', 'volume', 'panning'}
 
-	-- Tracks
+	structure.eventSum    = 0
+	structure.track = {}
 	for i=0, 15 do
+		local inst = {}
 
+		log("%1X. '%s' Track ", i, (i<8 and 'Melodic   ' or 'Percussive'))
+
+		v,n = file:read(2); if n ~= 2 then return false, errorString[4] end
+		inst.finetune   = util.bin2number(v, 'LE')
+		log("Finetune %4d ", inst.finetune)
+		--if finetune > 1999 then return false end
+
+		v,n = file:read(1); if n ~= 1 then return false, errorString[4] end
+		inst.instrument = string.byte(v)
+		log("Instrument %2d ", inst.instrument)
+		--if (i>7 and inst.instrument > 11) or (inst.instrument > 99) then
+			--return false
+		--end
+
+		v,n = file:read(1); if n ~= 1 then return false, errorString[4] end
+		inst.pizzicato  = string.byte(v)
+		log("Pi %1d ", inst.pizzicato)
+		--if inst.pizzicato > 1 then return false end
+
+		v,n = file:read(2); if n ~= 2 then return false, errorString[4] end
+		inst.eventCount = util.bin2number(v, 'LE')
+		log("Events %4d (%4d remain)\n", inst.eventCount,
+			16^3 - inst.eventCount)
+		--if inst.noteCount > 4095 then return false end
+
+		structure.eventSum = structure.eventSum + inst.eventCount
+		structure.track[i] = inst
+	end
+
+	log("Total events: %5d (%5d remaining)\n\n", structure.eventSum,
+		16^4 - structure.eventSum)
+
+
+
+	structure.event = {}
+	local fields = {'pitch', 'length', 'volume', 'panning'}
+	for i=0, 15 do
 		local track = {}
 
-		for j=0, structure.instruments[i].noteCount-1 do
+		for j=0, structure.track[i].noteCount-1 do
 			track[j] = {}
-			track[j].position = util.ansi2number(file:read(4), 'LE')
-		end
-
-		for k=1, #fields do	
-			for j=0, structure.instruments[i].noteCount-1 do
-				track[j][fields[k]] = string.byte(file:read(1))
+			v,n = file:read(4); if n ~= 4 then return false, errorString[5] end
+			track[j].position = util.bin2number(v, 'LE')
+			if not track.firstLoopEvent and
+				track[j].position >= structure.loopStart
+			then
+				track.firstLoopEvent = j
 			end
 		end
 
-		for j=0, structure.instruments[i].noteCount-1 do
-			--log("Track %0.1X Event %0.3X Position %0.8X Pitch %0.2X Length %0.2X Volume %0.2X Panning %0.2X",
-			--	i, j, track[j].position, track[j].pitch, track[j].length, track[j].volume, track[j].panning)
+		for k=1, #fields do	
+			for j=0, structure.track[i].noteCount-1 do
+				v,n = file:read(1)
+				if n ~= 1 then return false, errorString[5] end
+				track[j][fields[k]] = string.byte(v)
+			end
 		end
 
-		structure.song[i] = track
+		for j=0, structure.track[i].noteCount-1 do
+			log("Track %0.1X Event %0.3X Position %0.8X Pitch %0.2X " .. 
+				"Length %0.2X Volume %0.2X Panning %0.2X\n",
+				i, j, track[j].position, track[j].pitch, track[j].length,
+				track[j].volume, track[j].panning)
+		end
 
+		log("\n")
+		structure.event[i] = track
 	end
 
-	---------------------------------------------------------------------------
-	-- Finalization
-	---------------------------------------------------------------------------
 
-	structure.moduleType = string.format("Organya Org-%0.2d", structure.version)
 
+	structure.moduleType = ("Organya Org-%0.2d"):format(structure.version)
+	log("\n\n-- /Organya ORG loader/ --\n\n")
 	return structure
 end
 
