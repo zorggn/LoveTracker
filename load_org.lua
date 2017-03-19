@@ -67,7 +67,7 @@ local load_org = function(file)
 	local v,n
 
 	v,n = file:read(2); if n ~= 2 then return false, errorString[3] end
-	structure.tickRate    = util.bin2number(v, 'LE')
+	structure.tickRate    = util.bin2num(v, 'LE')
 	log("Tick rate:   %4d ms\n", structure.tickRate)
 
 	v,n = file:read(1); if n ~= 1 then return false, errorString[3] end
@@ -86,12 +86,12 @@ local load_org = function(file)
 	end
 
 	v,n = file:read(4); if n ~= 4 then return false, errorString[3] end
-	structure.loopStart   = util.bin2number(v, 'LE')
+	structure.loopStart   = util.bin2num(v, 'LE')
 	log("Loop start: %5d steps (%3d bars)\n", structure.loopStart,
 		structure.loopStart / structure.beatPerBar / structure.tickPerBeat)
 
 	v,n = file:read(4); if n ~= 4 then return false, errorString[3] end
-	structure.loopEnd     = util.bin2number(v, 'LE')
+	structure.loopEnd     = util.bin2num(v, 'LE')
 	log("Loop end:   %5d steps (%3d bars)\n", structure.loopEnd,
 		structure.loopEnd   / structure.beatPerBar / structure.tickPerBeat)
 
@@ -117,7 +117,7 @@ local load_org = function(file)
 		log("%1X. '%s' Track ", i, (i<8 and 'Melodic   ' or 'Percussive'))
 
 		v,n = file:read(2); if n ~= 2 then return false, errorString[4] end
-		inst.finetune   = util.bin2number(v, 'LE')
+		inst.finetune   = util.bin2num(v, 'LE')
 		log("Finetune %4d ", inst.finetune)
 		--if finetune > 1999 then return false end
 
@@ -134,7 +134,7 @@ local load_org = function(file)
 		--if inst.pizzicato > 1 then return false end
 
 		v,n = file:read(2); if n ~= 2 then return false, errorString[4] end
-		inst.eventCount = util.bin2number(v, 'LE')
+		inst.eventCount = util.bin2num(v, 'LE')
 		log("Events %4d (%4d remain)\n", inst.eventCount,
 			16^3 - inst.eventCount)
 		--if inst.noteCount > 4095 then return false end
@@ -156,7 +156,7 @@ local load_org = function(file)
 		for j=0, structure.track[i].noteCount-1 do
 			track[j] = {}
 			v,n = file:read(4); if n ~= 4 then return false, errorString[5] end
-			track[j].position = util.bin2number(v, 'LE')
+			track[j].position = util.bin2num(v, 'LE')
 			if not track.firstLoopEvent and
 				track[j].position >= structure.loopStart
 			then
