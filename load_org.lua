@@ -40,11 +40,11 @@ local definedTimeSignatures = {
 }
 
 local errorString = {
-	"File header did not start with 'Org-'.",
-	"Unsupported format version.",
-	"Early end-of-file in header.",
-	"Early end-of-file in track properities.",
-	"Early end-of-file in event list.",
+	--[[1]] "File header did not start with 'Org-'.",
+	--[[2]] "Unsupported format version.",
+	--[[3]] "Early end-of-file in header.",
+	--[[4]] "Early end-of-file in track properities.",
+	--[[5]] "Early end-of-file in event list.",
 }
 
 local load_org = function(file)
@@ -57,26 +57,26 @@ local load_org = function(file)
 	local formatstring = file:read(6)
 	if formatstring:sub(1,4) ~= "Org-" then return false, errorString[1] end
 	structure.version  = formatstring:sub(-2)
-	log("Format string: %s\n", formatstring)
+	log("Format string:   %s\n", formatstring)
 
 	local allowed = {['01'] = true, ['02'] = true, ['03'] = true}
 	if not allowed[structure.version] then return false, errorString[2] end
 	structure.version = tonumber(structure.version)
-	log("Format version %02d\n", structure.version)
+	log("Format version: %2d\n", structure.version)
 
 	local v,n
 
 	v,n = file:read(2); if n ~= 2 then return false, errorString[3] end
 	structure.tickRate    = util.bin2num(v, 'LE')
-	log("Tick rate:   %4d ms\n", structure.tickRate)
+	log("Tick rate:    %4d ms\n", structure.tickRate)
 
 	v,n = file:read(1); if n ~= 1 then return false, errorString[3] end
 	structure.beatPerBar  = string.byte(v)
-	log("Steps/Bar:    %3d\n",   structure.beatPerBar)
+	log("Beats/Bar:     %3d\n",   structure.beatPerBar)
 
 	v,n = file:read(1); if n ~= 1 then return false, errorString[3] end
 	structure.tickPerBeat = string.byte(v)
-	log("Ticks/Step:   %3d\n",   structure.tickPerBeat)
+	log("Ticks/Beat:    %3d\n",   structure.tickPerBeat)
 
 	if not definedTimeSignatures[('%d/%d'):format(
 		structure.tickPerBeat, structure.beatPerBar)]
@@ -87,12 +87,12 @@ local load_org = function(file)
 
 	v,n = file:read(4); if n ~= 4 then return false, errorString[3] end
 	structure.loopStart   = util.bin2num(v, 'LE')
-	log("Loop start: %5d steps (%3d bars)\n", structure.loopStart,
+	log("Loop start:  %5d. beat / %3d. bar\n", structure.loopStart,
 		structure.loopStart / structure.beatPerBar / structure.tickPerBeat)
 
 	v,n = file:read(4); if n ~= 4 then return false, errorString[3] end
 	structure.loopEnd     = util.bin2num(v, 'LE')
-	log("Loop end:   %5d steps (%3d bars)\n", structure.loopEnd,
+	log("Loop end:    %5d. beat / %3d. bar\n", structure.loopEnd,
 		structure.loopEnd   / structure.beatPerBar / structure.tickPerBeat)
 
 	if  ((structure.loopStart / structure.beatPerBar / structure.tickPerBeat)
@@ -105,7 +105,7 @@ local load_org = function(file)
 	end
 
 	structure.tempo       = 6e4 / (structure.tickRate * structure.tickPerBeat)
-	log("Tempo: %9.4f BPM (calculated)\n\n", structure.tempo)
+	log("Tempo:        %9.4f BPM (calculated)\n\n", structure.tempo)
 
 
 
@@ -114,7 +114,7 @@ local load_org = function(file)
 	for i=0, 15 do
 		local inst = {}
 
-		log("%1X. '%s' Track ", i, (i<8 and 'Melodic   ' or 'Percussive'))
+		log("Track %1X %s ", i, (i<8 and "(Melodic)   " or "(Percussive)"))
 
 		v,n = file:read(2); if n ~= 2 then return false, errorString[4] end
 		inst.finetune   = util.bin2num(v, 'LE')
@@ -135,9 +135,9 @@ local load_org = function(file)
 
 		v,n = file:read(2); if n ~= 2 then return false, errorString[4] end
 		inst.eventCount = util.bin2num(v, 'LE')
-		log("Events %4d (%4d remain)\n", inst.eventCount,
+		log("Events %4d (%4d remaining)\n", inst.eventCount,
 			16^3 - inst.eventCount)
-		--if inst.noteCount > 4095 then return false end
+		--if inst.eventCount > 4095 then return false end
 
 		structure.eventSum = structure.eventSum + inst.eventCount
 		structure.track[i] = inst
@@ -153,7 +153,7 @@ local load_org = function(file)
 	for i=0, 15 do
 		local track = {}
 
-		for j=0, structure.track[i].noteCount-1 do
+		for j=0, structure.track[i].eventCount-1 do
 			track[j] = {}
 			v,n = file:read(4); if n ~= 4 then return false, errorString[5] end
 			track[j].position = util.bin2num(v, 'LE')
@@ -165,21 +165,21 @@ local load_org = function(file)
 		end
 
 		for k=1, #fields do	
-			for j=0, structure.track[i].noteCount-1 do
+			for j=0, structure.track[i].eventCount-1 do
 				v,n = file:read(1)
 				if n ~= 1 then return false, errorString[5] end
 				track[j][fields[k]] = string.byte(v)
 			end
 		end
 
-		for j=0, structure.track[i].noteCount-1 do
+		for j=0, structure.track[i].eventCount-1 do
 			log("Track %0.1X Event %0.3X Position %0.8X Pitch %0.2X " .. 
 				"Length %0.2X Volume %0.2X Panning %0.2X\n",
 				i, j, track[j].position, track[j].pitch, track[j].length,
 				track[j].volume, track[j].panning)
 		end
 
-		log("\n")
+		if structure.track[i].eventCount > 0 then log("\n") end
 		structure.event[i] = track
 	end
 
