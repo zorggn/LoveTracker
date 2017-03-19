@@ -7,8 +7,8 @@
 --       other playroutines are kept inside the respective play_*.lua files,
 --       a.k.a. these ones.
 
-local Driver = require 'Driver'
-local device = Driver(44100, 8, 2, 1024, 'Buffer', 'Buffer')
+local Device = require 'device'
+local device = Device(44100, 8, 2, 1024, 'CPU', 'Buffer')
 
 -- Start defining everything as local, then if we need something to be passed
 -- into something that's a bit more "closed", redefine it as a var. of routine.
@@ -148,21 +148,21 @@ Voice.process = function(v)
 
 	-- Increment offset
 	if v.type == 'melodic' then
-		v.offsetAccum = v.offsetAccum +
-			((v.frequency * PERIODSIZE[v.octave]) / Audio.samplingRate) *
+		v.offsetAccumulator = v.offsetAccumulator +
+			((v.frequency * PERIODSIZE[v.octave]) / device.samplingRate) *
 			(1 / SMPMULTIPLIER[v.octave])
-		while v.offsetAccum >= 1 do
+		while v.offsetAccumulator >= 1 do
 			v.currentOffset = (v.currentOffset + SMPINCREMENT[v.octave]) %
 			v.data:getSampleCount()
-			v.offsetAccum = v.offsetAccum - 1
+			v.offsetAccumulator = v.offsetAccumulator - 1
 		end
 	else
-		v.offsetAccum = v.offsetAccum +
-			(((v.frequency / 2) * PERIODSIZE[v.octave]) / Audio.samplingRate) *
+		v.offsetAccumulator = v.offsetAccumulator +
+			(((v.frequency / 2) * PERIODSIZE[v.octave]) / device.samplingRate) *
 			(1 / SMPMULTIPLIER[v.octave])
-		while v.offsetAccum >= 1 do
+		while v.offsetAccumulator >= 1 do
 			v.currentOffset = (v.currentOffset + SMPINCREMENT[v.octave])
-			v.offsetAccum = v.offsetAccum - 1
+			v.offsetAccumulator = v.offsetAccumulator - 1
 		end
 		if v.currentOffset >= v.data:getSampleCount() then
 			v.currentOffset = 0
@@ -222,7 +222,7 @@ Voice.new = function(type, instrument, finetune, pizzicato)
 		local buffer = file:read(256)
 		v.data = love.sound.newSoundData(
 			256,
-			Device.samplingRate, -- doesn't matter.
+			device.samplingRate, -- doesn't matter.
 			8, 
 			1
 		)
@@ -241,7 +241,7 @@ Voice.new = function(type, instrument, finetune, pizzicato)
 			-- drums.
 			v.data = love.sound.newSoundData(
 				1,
-				Device.samplingRate, -- doesn't matter.
+				device.samplingRate, -- doesn't matter.
 				8, 
 				1
 			)
@@ -252,7 +252,7 @@ Voice.new = function(type, instrument, finetune, pizzicato)
 			local buffer = file:read()
 			v.data = love.sound.newSoundData(
 				#buffer,
-				Device.samplingRate, -- doesn't matter.
+				device.samplingRate, -- doesn't matter.
 				8, 
 				1
 			)
@@ -285,12 +285,13 @@ routine.load = function(mod)
 
 	-- Create and initialize voices.
 	normalizer = 0.0
+	voice = {}
 	for t=0, 15 do
 		voice[t] = Voice.new(
 			t<8 and 'melodic' or 'percussive',
 			module.track[t].instrument,
 			module.track[t].finetune,
-			module.track[t].pizzicato,
+			module.track[t].pizzicato
 		)
 
 		-- Not strictly necessary for the voices to know about this one.
@@ -371,7 +372,7 @@ routine.render = function(dt)
 	-- Rendermode
 	if device.renderMode == 'CPU' then
 		samplesToMix = math.min(
-			math.ceil(dt / samplingPeriod),
+			math.floor(dt / samplingPeriod),
 			math.floor(tickPeriod / samplingPeriod),
 			buffer.data:getSampleCount()
 		)
@@ -382,6 +383,8 @@ routine.render = function(dt)
 			buffer.data:getSampleCount()
 		)
 	end
+
+	if samplesToMix == 0 then return end
 
 	for i=0, samplesToMix-1 do
 		local smpL, smpR = 0.0, 0.0
