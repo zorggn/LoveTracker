@@ -8,7 +8,7 @@
 --       a.k.a. these ones.
 
 local Device = require 'device'
-local device = Device(44100, 8, 2, 1024, 'CPU', 'Buffer')
+local device = Device(44100, 16, 2, 1024, 'Buffer', 'Buffer')
 
 -- Start defining everything as local, then if we need something to be passed
 -- into something that's a bit more "closed", redefine it as a var. of routine.
@@ -371,13 +371,15 @@ end
 routine.render = function(dt)
 	-- Rendermode
 	if device.renderMode == 'CPU' then
+		-- We could check the buffer state here, like below, but that would
+		-- swap underruns with rendering slowdowns.
 		samplesToMix = math.min(
-			math.floor(dt / samplingPeriod),
-			math.floor(tickPeriod / samplingPeriod),
-			buffer.data:getSampleCount()
+			math.floor(dt / samplingPeriod)
+			,buffer.data:getSampleCount()
 		)
 
 	elseif device.renderMode == 'Buffer' then
+		if source.queue:getFreeBufferCount() == 0 then return end
 		samplesToMix = math.min(
 			math.floor(tickPeriod / samplingPeriod),
 			buffer.data:getSampleCount()
