@@ -32,7 +32,7 @@
 --]]
 
 local util = require('util')
-local log = function(str,...) io.write(string.format(str,...)) end
+local log = function(str,...) --[[io.write(string.format(str,...))--]] end
 
 local definedTimeSignatures = {
 	['4/4'] = true, ['3/4'] = true, ['4/3'] = true, ['3/3'] = true,
