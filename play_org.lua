@@ -158,7 +158,7 @@ Voice.process = function(v)
 		end
 	else
 		v.offsetAccumulator = v.offsetAccumulator +
-			(((v.frequency / 2) * PERIODSIZE[v.octave]) / device.samplingRate) *
+			(((v.frequency/2) * PERIODSIZE[v.octave]) / device.samplingRate) *
 			(1 / SMPMULTIPLIER[v.octave])
 		while v.offsetAccumulator >= 1 do
 			v.currentOffset = (v.currentOffset + SMPINCREMENT[v.octave])
@@ -489,7 +489,8 @@ routine.draw = function()
 	love.graphics.setColor(0.1,0.1,0.2)
 	love.graphics.rectangle('fill',0,0,49*8,17*12)
 	love.graphics.setColor(1,1,1)
-	love.graphics.print("fine in pi indx ncnt position nt ln vl pn tc offs",0,0)
+	love.graphics.print("fine in pi indx ncnt position nt ln vl pn tc offs",
+		0, 0)
 	for v=0, 15 do
 		local stats = {voice[v]:getStatistics()}
 		love.graphics.print(
