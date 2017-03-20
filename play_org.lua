@@ -351,11 +351,11 @@ routine.step = function()
 
 	-- Loop processing
 	if currentTick == module.loopEnd then
-		routine.currentTick = module.loopStart
+		currentTick = module.loopStart
 		-- Set event counters to precalculated indices that are the first ones
 		-- after the loop's starting point.
 		for v=0, 15 do
-			voice[v].currentEvent = module.event.firstLoopEvent
+			voice[v].currentEvent = module.event[v].firstLoopEvent
 		end
 	end
 
