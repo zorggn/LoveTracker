@@ -164,7 +164,7 @@ local load_org = function(file)
 			end
 		end
 		if not track.firstLoopEvent then
-			track.firstLoopEvent = math.max(structure.track[i].eventCount-1, 0)
+			track.firstLoopEvent = structure.track[i].eventCount
 		end
 
 		for k=1, #fields do	
