@@ -173,7 +173,7 @@ local load_s3m = function(file)
 	file:read(2)
 
 	-- 0x20: Number of orders.
-	structure.ordNum = util.ansi2number(file:read(2), 'LE')
+	structure.ordNum = util.bin2num(file:read(2), 'LE')
 	log("Number of orders: %d", structure.ordNum)
 	if structure.ordNum > 256 then
 		log("Number of orders greater than 256, fixing value to 256.")
@@ -182,7 +182,7 @@ local load_s3m = function(file)
 
 	-- 0x22: Number of instruments. Technical limit is 99, but as far as i read back, no tracker ever supported more
 	-- than 32 back then.
-	structure.insNum = util.ansi2number(file:read(2), 'LE')
+	structure.insNum = util.bin2num(file:read(2), 'LE')
 	log("Number of samples: %d", structure.insNum)
 	if structure.insNum > 99 then
 		log("Number of samples greater than 99, fixing value to 99.")
@@ -190,7 +190,7 @@ local load_s3m = function(file)
 	end
 
 	-- 0x24: Number of patterns.
-	structure.patNum = util.ansi2number(file:read(2), 'LE')
+	structure.patNum = util.bin2num(file:read(2), 'LE')
 	log("Number of patterns: %d", structure.patNum)
 	if structure.patNum > 100 then
 		log("Number of patterns greater than 100, fixing value to 100.")
@@ -206,12 +206,12 @@ local load_s3m = function(file)
 	--  32 - enable filter/sfx (not supported) //amiga filter (simulation/emulation)? -zorg
 	--  64 - ST3.00 volslides (a cwt value of 1300 also should set this if it isn't...) - Dxx -> 0th tick enabled too.
 	-- 128 - 
-	local flags = util.bin2bitfield(file:read(2), 'LE')
+	local flags = util.bin2flags(file:read(2), 'LE')
 
 	-- 0x28: Created with tracker / version (CWT/V)
 	-- 0x1300 - ST3.00 - volslides happen on every frame, not just non-T0 frames!
 	-- 0x1301, 03, 20 -- ST3.01, 03, 20 - otherwise.
-	local cwtv = util.ansi2number(file:read(2), 'LE')
+	local cwtv = util.bin2num(file:read(2), 'LE')
 	log("Created With/Tracker Version: %X",cwtv)
 	if  cwtv == 0x1300 then structure.version = '3.00' elseif
 		cwtv == 0x1301 then structure.version = '3.01' elseif
@@ -223,7 +223,7 @@ local load_s3m = function(file)
 
 	-- 0x2A: Sample Format -- 1: signed, 2: unsigned (2 is the usual case)
 	-- We don't necessarily need to store this info. //Especially since it's module-global :/ -zorg
-	local smpf = util.ansi2number(file:read(2), 'LE')
+	local smpf = util.bin2num(file:read(2), 'LE')
 	if smpf == 1 then
 		log("Sample format:   signed")
 	elseif smpf == 2 then
@@ -237,20 +237,20 @@ local load_s3m = function(file)
 	file:read(4)
 
 	-- 0x30: Global volume: finalvol = vol[track] * (globalvol / 64)
-	structure.globalVolume = util.ansi2number(file:read(1))
+	structure.globalVolume = util.bin2num(file:read(1))
 	log("Global volume: %d", structure.globalVolume)
 
 	-- 0x31: Initial speed. (6 in mods)
-	structure.initialSpeed = util.ansi2number(file:read(1))
+	structure.initialSpeed = util.bin2num(file:read(1))
 	log("Initial speed: %d", structure.initialSpeed)
 
 	-- 0x32: Initial tempo. (125 in mods)
-	structure.initialTempo = util.ansi2number(file:read(1))
+	structure.initialTempo = util.bin2num(file:read(1))
 	log("Initial tempo: %d", structure.initialTempo)
 
 	-- 0x33: Master volume: lower 7 bits are the volume, the 8th is whether mono (0) or stereo (1).
 	-- TODO: is this correct?
-	local mvol = util.ansi2number(file:read(1))
+	local mvol = util.bin2num(file:read(1))
 	structure.isStereo = math.floor(mvol / 128) == 1 and true or false
 	structure.masterVolume = mvol>127 and mvol-128 or mvol -- This could probably be expressed in a nicer way.
 	log("Master volume: %d", structure.masterVolume)
@@ -260,7 +260,7 @@ local load_s3m = function(file)
 	file:read(1)
 
 	-- 0x35: Default panning: misleading name, if 252, then values are stored for each channel, else skip.
-	local dpan = util.ansi2number(file:read(1))
+	local dpan = util.bin2num(file:read(1))
 	if dpan == 252 then
 		structure.defaultPan = true
 	else
@@ -289,7 +289,7 @@ local load_s3m = function(file)
 	log('Loading channel map...\n')
 	local pos = 0
 	for i = 0, 31 do
-		local n = util.ansi2number(file:read(1))
+		local n = util.bin2num(file:read(1))
 		-- OPL stuff if >= 16... 255 means it's disabled.
 		-- Alternatively, OPL channels go from 8 to 30. (9 L melo, 9 R melo, 5 drum), and 128 is the disabled flag.
 		if n < 16 then
@@ -324,7 +324,7 @@ local load_s3m = function(file)
 
 	-- Load in order data. (254 is skip, 255 is empty)
 	for i = 0, structure.ordNum-1 do
-		structure.orders[i] = util.ansi2number(file:read(1))
+		structure.orders[i] = util.bin2num(file:read(1))
 		log("Order #%d (%X): %d", i, i, structure.orders[i])
 	end
 
@@ -358,14 +358,14 @@ local load_s3m = function(file)
 	-- Read instrument parapointers.
 	local pptrSmp = {} -- max.  99, as before
 	for i = 0, structure.insNum-1 do
-		pptrSmp[i] = util.ansi2number(file:read(2), 'LE') * 16 -- <<4 (*16) for true seekable locations.
+		pptrSmp[i] = util.bin2num(file:read(2), 'LE') * 16 -- <<4 (*16) for true seekable locations.
 	end
 	log("Loaded instrument parapointers.")
 
 	-- Read pattern parapointers.
 	local pptrPat = {} -- max. 100, as before
 	for i = 0, oldPatNum-1 do
-		pptrPat[i] = util.ansi2number(file:read(2), 'LE') * 16 -- Same as above.
+		pptrPat[i] = util.bin2num(file:read(2), 'LE') * 16 -- Same as above.
 	end
 	log("Loaded pattern parapointers.")
 
@@ -373,7 +373,7 @@ local load_s3m = function(file)
 	if structure.defaultPan then
 		structure.defaultPan = {} -- //OpenMPT seems to treat both pan tables as one... -zorg
 		for i = 0, 31 do
-			structure.defaultPan[i] = util.ansi2number(file:read(1)) % 16 -- == x && 0xF, top nibble is garbage.
+			structure.defaultPan[i] = util.bin2num(file:read(1)) % 16 -- == x && 0xF, top nibble is garbage.
 			-- If we previously detected that the module is mono, overrule panning to center.
 			if not structure.isStereo then structure.defaultPan[i] = 7 end -- bit off to the left tho...
 			log("Channel %d (%X) panning set to %d (%X).", i, i, structure.defaultPan[i], structure.defaultPan[i])
@@ -401,7 +401,7 @@ local load_s3m = function(file)
 		log("Seeked to %X", pptrSmp[i])
 
 		-- +0x00: Instrument format.
-		instrument.type = util.ansi2number(file:read(1))
+		instrument.type = util.bin2num(file:read(1))
 		log("Sample %d type: %d (%s)", i, instrument.type,
 			instrument.type == 1 and "Sampler" or (
 				instrument.type == 0 and "Empty" or "Other"))
@@ -427,14 +427,14 @@ local load_s3m = function(file)
 			log("Sample #%d (%X) DOS filename: %s", i, i, instrument.filename)
 
 			-- +0x0D: Sample position.
-			local a,b,c = util.ansi2number(file:read(1)), util.ansi2number(file:read(1)), util.ansi2number(file:read(1))
+			local a,b,c = util.bin2num(file:read(1)), util.bin2num(file:read(1)), util.bin2num(file:read(1))
 			-- sample_pos = (a SHL 16) + ((c SHL 8) + b)
 			instrument.memPos = b * 0x10 + c * 0x1000 + a * 0x100000 -- UL -> 32bit ok FIX LATER
 			-- This one doesn't need to be multiplied by 16 / shifted left by 4!
 			log("Sample position: (%X)", instrument.memPos)
 
 			-- +0x10: Sample length.
-			instrument.smpLen = util.ansi2number(file:read(2), 'LE')
+			instrument.smpLen = util.bin2num(file:read(2), 'LE')
 			file:read(2) -- This short is not used since st3 only supports 64k max samplesizes.
 			if instrument.smpLen > 64000 then
 				log("Sample length of %d is bigger than 64k! Truncating...", instrument.smpLen)
@@ -444,31 +444,31 @@ local load_s3m = function(file)
 			end
 
 			-- +0x14: Sample loop start point.
-			instrument.smpLoopStart = util.ansi2number(file:read(2), 'LE')
+			instrument.smpLoopStart = util.bin2num(file:read(2), 'LE')
 			file:read(2) -- This short is not used since st3 only supports 64k max samplesizes.
 			log("Loop start point: %d", instrument.smpLoopStart)
 
 			-- +0x18: Sample loop end point.
-			instrument.smpLoopEnd = util.ansi2number(file:read(2), 'LE')
+			instrument.smpLoopEnd = util.bin2num(file:read(2), 'LE')
 			file:read(2) -- This short is not used since st3 only supports 64k max samplesizes.
 			log("Loop end point:   %d", instrument.smpLoopEnd)
 
 			-- +0x1C: Sample volume.
-			instrument.volume = util.ansi2number(file:read(1))
+			instrument.volume = util.bin2num(file:read(1))
 			log("Sample volume: %d (%X)", instrument.volume, instrument.volume)
 
 			-- +0x1D: Unused, skip.
 			file:read(1)
 
 			-- +0x1E: Packing scheme. (should always be 0)
-			instrument.packingScheme = util.ansi2number(file:read(1))
+			instrument.packingScheme = util.bin2num(file:read(1))
 			-- if 1 then DP30ADPCM else unpacked (raw).
 			log("Packing scheme: %s",
 				instrument.packingScheme == 0 and 'Unpacked' or (
 					instrument.packingScheme == 1 and 'DP30ADPCM' or 'Unknown'))
 
 			-- +0x1F: Flags
-			local flags = util.ansi2number(file:read(1))
+			local flags = util.bin2num(file:read(1))
 			log("Flags: %X", flags)
 			-- only one is implemented, looping.
 			-- 1 looping
@@ -482,7 +482,7 @@ local load_s3m = function(file)
 			log("Sample loop: %s", instrument.looping and 'Enabled' or 'Disabled')
 
 			-- +0x20: c2spd (c4spd in reality)
-			instrument.c4speed = util.ansi2number(file:read(2), 'LE')
+			instrument.c4speed = util.bin2num(file:read(2), 'LE')
 			file:read(2) -- This short is not used.
 			log("C4 Speed: %d", instrument.c4speed)
 
@@ -533,7 +533,7 @@ local load_s3m = function(file)
 		log("Pat %X; Seeked to %X", i, pptrPat[i])
 
 		-- We don't really need the packed size of the pattern blocks...
-		local pps = util.ansi2number(file:read(2), 'LE')
+		local pps = util.bin2num(file:read(2), 'LE')
 		log("Packed pattern size: %X", pps)
 
 		for j = 0, 63 do -- rows
@@ -547,7 +547,7 @@ local load_s3m = function(file)
 			repeat
 
 				-- Read in the fields
-				local r  = util.ansi2number(file:read(1))
+				local r  = util.bin2num(file:read(1))
 
 				-- If the byte is not empty...
 				if r ~= 0 then
@@ -571,8 +571,8 @@ local load_s3m = function(file)
 					local ni  = bit.band(r,  32) -- further read note, instrument bytes
 					if ni == 32 then
 						--log("Found note & instrument byte!")
-						local note = util.ansi2number(file:read(1))
-						local inst = util.ansi2number(file:read(1))
+						local note = util.bin2num(file:read(1))
+						local inst = util.bin2num(file:read(1))
 						if not dummy then
 							if note == 255 then
 								row[structure.channelMap[ch]].note = false
@@ -596,7 +596,7 @@ local load_s3m = function(file)
 					local vo  = bit.band(r,  64) -- further read volume col byte
 					if vo == 64 then
 						--log("Found volume column byte!")
-						local volc = util.ansi2number(file:read(1))
+						local volc = util.bin2num(file:read(1))
 						if not dummy then
 							row[structure.channelMap[ch]].volumecmd = volc -- number, simple
 						end
@@ -610,8 +610,8 @@ local load_s3m = function(file)
 					local fx  = bit.band(r, 128) -- further read fx col command and param bytes
 					if fx == 128 then
 						--log("Found effect column byte!")
-						local cmmnd = util.ansi2number(file:read(1))
-						local param = util.ansi2number(file:read(1))
+						local cmmnd = util.bin2num(file:read(1))
+						local param = util.bin2num(file:read(1))
 						if not dummy then
 							row[structure.channelMap[ch]].effectcmd = cmmnd -- number...for now
 							row[structure.channelMap[ch]].effectprm = param -- number, simple
@@ -663,12 +663,12 @@ local load_s3m = function(file)
 			for j = 0, structure.instruments[i].smpLen-1 do
 				if smpf == 2 then
 					-- Unsigned
-					local x = util.ansi2number(buffer:sub(j,j))
+					local x = util.bin2num(buffer:sub(j,j))
 					--print((x-128)/256)
 					structure.instruments[i].data:setSample(j, (x-128)/256) -- normalize to [-1,1]
 				elseif smpf == 1 then
 					-- Signed -> convert to unsigned (x>127&-(256-x)|x)
-					local x = util.ansi2number(buffer:sub(j,j))
+					local x = util.bin2num(buffer:sub(j,j))
 					x = x > 127 and -(256-x) or x
 					structure.instruments[i].data:setSample(j, (x/128)) -- normalize to [-1,1]
 				end
