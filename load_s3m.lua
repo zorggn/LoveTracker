@@ -619,84 +619,99 @@ local load_s3m = function(file)
 	structure.pattern = {}
 	for pat = 0, structure.patternCount-1 do
 		local pattern = {}
-		file:seek(paraptrPat[pat])
-		log("Pattern 0x%04X at 0x%06X ", pat, paraptrPat[pat])
-		v, n = file:read(2); if n ~= 2 then return false, errorString[14] end
-		local packedSize = util.bin2num(v, 'LE')
-		log("Packed Size: %04X bytes\n", packedSize)
-		packedSize = packedSize - 2 -- Don't count length short.
-		v, n = file:read(packedSize)
-		if n ~= packedSize then return false, errorString[14] end
-		local packedData = v
-		local ptr = 1
-		local row = 0
-		for row = 0, 63 do
-			pattern[row] = {}
-			for ch = 0, structure.channelCount-1 do
-				pattern[row][structure.channel[ch].map] = {}
-			end
-		end
-		while ptr <= packedSize do
-			local byte = util.bin2num(packedData:sub(ptr,ptr))
-			if byte ~= 0 then
-				local ch = byte % 0x20
-				byte = math.floor(byte / 0x20)
-				local cell = {}
-				local ni = byte % 0x2
-				byte = math.floor(byte / 0x2)
-				if ni == 1 then
-					if ch <= structure.channelCount-1 then
-						cell.note = util.bin2num(packedData:sub(ptr+1,ptr+1))
-						cell.instrument = 
-							util.bin2num(packedData:sub(ptr+2,ptr+2))
-					end
-					ptr = ptr + 2
+		-- Safety if a "fake" pattern is included that points to 0x000000
+		if paraptrPat[pat] == 0 then
+			structure.pattern[pat] = {}
+			for row = 0, 63 do
+				structure.pattern[pat][row] = {}
+				for ch = 0, structure.channelCount-1 do
+					structure.pattern[pat][row][structure.channel[ch].map] = {}
 				end
-				local vl = byte % 0x2
-				byte = math.floor(byte / 0x2)
-				if vl == 1 then
-					if ch <= structure.channelCount-1 then
-						cell.volume = util.bin2num(packedData:sub(ptr+1,ptr+1))
+			end
+		else
+			file:seek(paraptrPat[pat])
+			log("Pattern 0x%04X at 0x%06X ", pat, paraptrPat[pat])
+			v, n = file:read(2)
+			if n ~= 2 then return false, errorString[14] end
+			local packedSize = util.bin2num(v, 'LE')
+			log("Packed Size: %04X bytes\n", packedSize)
+			packedSize = packedSize - 2 -- Don't count length short.
+			v, n = file:read(packedSize)
+			if n ~= packedSize then return false, errorString[14] end
+			local packedData = v
+			local ptr = 1
+			local row = 0
+			for row = 0, 63 do
+				pattern[row] = {}
+				for ch = 0, structure.channelCount-1 do
+					pattern[row][structure.channel[ch].map] = {}
+				end
+			end
+			while ptr <= packedSize do
+				local byte = util.bin2num(packedData:sub(ptr,ptr))
+				if byte ~= 0 then
+					local ch = byte % 0x20
+					byte = math.floor(byte / 0x20)
+					local cell = {}
+					local ni = byte % 0x2
+					byte = math.floor(byte / 0x2)
+					if ni == 1 then
+						if ch <= structure.channelCount-1 then
+							cell.note = util.bin2num(
+								packedData:sub(ptr+1,ptr+1))
+							cell.instrument = 
+								util.bin2num(packedData:sub(ptr+2,ptr+2))
+						end
+						ptr = ptr + 2
 					end
+					local vl = byte % 0x2
+					byte = math.floor(byte / 0x2)
+					if vl == 1 then
+						if ch <= structure.channelCount-1 then
+							cell.volume = util.bin2num(
+							packedData:sub(ptr+1,ptr+1))
+						end
+						ptr = ptr + 1
+					end
+					local fx = byte
+					if fx == 1 then
+						if ch <= structure.channelCount-1 then
+							cell.effectCommand =
+								util.bin2num(packedData:sub(ptr+1,ptr+1))
+							cell.effectData =
+								util.bin2num(packedData:sub(ptr+2,ptr+2))
+						end
+						ptr = ptr + 2
+					end
+					pattern[row][structure.channel[ch].map] = cell
+					ptr = ptr + 1
+				else
+					row = row + 1
 					ptr = ptr + 1
 				end
-				local fx = byte
-				if fx == 1 then
-					if ch <= structure.channelCount-1 then
-						cell.effectCommand =
-							util.bin2num(packedData:sub(ptr+1,ptr+1))
-						cell.effectData =
-							util.bin2num(packedData:sub(ptr+2,ptr+2))
-					end
-					ptr = ptr + 2
+			end
+			for row = 0, 63 do
+				log("    |")
+				for ch = 0, structure.channelCount-1 do
+					local cell = pattern[row][structure.channel[ch].map]
+					log("%3s %2s v%2s %1s%2s|",
+						cell.note and
+							noteTf(cell.note) or '...',
+						cell.instrument and
+							("%02X"):format(cell.instrument) or '..',
+						cell.volume and
+							("%02X"):format(cell.volume) or '..',
+						cell.effectCommand and
+							string.char(string.byte('A') +
+								cell.effectCommand - 1)
+							or '.',
+						cell.effectData and
+							("%02X"):format(cell.effectData) or '..')
 				end
-				pattern[row][structure.channel[ch].map] = cell
-				ptr = ptr + 1
-			else
-				row = row + 1
-				ptr = ptr + 1
+				log("\n")
 			end
+			structure.pattern[pat] = pattern
 		end
-		for row = 0, 63 do
-			log("    |")
-			for ch = 0, structure.channelCount-1 do
-				local cell = pattern[row][structure.channel[ch].map]
-				log("%3s %2s v%2s %1s%2s|",
-					cell.note and
-						noteTf(cell.note) or '...',
-					cell.instrument and
-						("%02X"):format(cell.instrument) or '..',
-					cell.volume and
-						("%02X"):format(cell.volume) or '..',
-					cell.effectCommand and
-						string.char(string.byte('A') + cell.effectCommand - 1)
-						or '.',
-					cell.effectData and
-						("%02X"):format(cell.effectData) or '..')
-			end
-			log("\n")
-		end
-		structure.pattern[pat] = pattern
 	end
 	log("\n")
 
