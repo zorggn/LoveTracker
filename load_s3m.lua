@@ -1,704 +1,743 @@
--- Scream Tracker 3 "S3M" module file importer/parser
--- by zorg @ 2016-2017 § ISC
+-- Scream Tracker 3 "S3M" importer/parser
+-- by zorg @ 2017 § ISC
+-- Original format by Future Crew (Probably based on the ProTracker format,
+-- which, in turn was based on Ultimate Soundtracker by Karsten Obarski.)
 
--- See doc/s3m.txt for references.
+-- Note: The below implementation allows unknown pattern cell data into the
+--       internal representation of the loaded modules; the playroutine itself
+--       doesn't bork on such things, and they get shown graphically as such.
 
-local log = function(str,...)
-	print(string.format(str,...))
-end
-local util = require('util')
-
--- The structure of the module kept in memory:
 --[[
-	string - fileType     -- The extension of the module. (Added in loader.lua)
-	string - moduleType   -- What tracker was the possible culprit that created this module;
-	                      -- For s3m files, it'll always be "Scream Tracker 3", appended by a version number.
+	Structure definition:
+		title                      - string[27+1]
+		orderCount                 - 0x00..0xFF
+		sampleCount                - 0x00..0x63
+		patternCount               - 0x00..0x64
+		killSilentLoops            - boolean
+		amigaNoteLimits            - boolean
+		fastVolSlides              - boolean
+		version                    - string[4]
+		sampleFormat               - Signed, Unsigned
+		globalVolume               - 0x00..0x40
+		initialSpeed               - 0x00..0x1F
+		initialTempo               - 0x20..0xFF
+		isStereo                   - boolean
+		masterVolume               - 0x00..0x40
+		channelCount               - calculated
 
-	string - title        -- Title of the module. (27 or 28 characters maximum)
-	number - ordNum       -- Number of pattern orders. (0-based) 
-	number - insNum       -- Number of instruments. (Samplers or AdLib OPL2 synth patches) (0-based)
-	string - version      -- CWT/V value as a string; gets concatenated to the end of moduleType.
-	number - globalVolume -- ~/64 [0,1] - Global volume multiplier.
-	number - initialSpeed -- Row subdivision count, number of ticks under each row.
-	number - initialTempo -- Speed of the interrupt handler; TimerRate = 1193180 / (Tempo * 2 / 5), magic number is
-	                      -- PC timer (oscillator) rate in Hz.
-	bool   - isStereo     -- If false, then every channel is panned to center.
-	number - masterVolume -- Sample premultiplication. (only on SB, so probably everywhere now, iirc OpenMPT uses it
-	                      -- as such)
-	bool   - defaultPan   -- If true, panning values are stored, else they aren't. (which means what, exactly?
-	                      -- center if false?)
-	n : n  - channelMap   -- Correlates absolute channel ordinals with relative indices.
-	                      -- (map[in-tracker index] -> file ch pos.)
-	n : n  - channelPan   -- Uses same relative indices as above but stores 'L' or 'R' as panning values...
-	                      -- probably amiga limits.
-	number - chnNum       -- Number of actually used channels. (0-based)
-	n : n  - orders       -- Array holding the order data.
-	number - patNum       -- Number of distinct patterns. (0-based)
+		channel[]                  - 0x00..0x1F
+			enabled                - boolean
+			map                    - 0x00..0x1F
+			type                   - 'Sampler', 'AdLib Melody', 'AdLib Drum',
+			                         'Unknown'
+			pan                    - 0x0..0xF
 
-	instruments  -- Array holding instrument data
-			type          -- 1 then sampler, 0 then empty, else OPL2.
-			filename      -- DOS filename of sample.
-			memPos        -- Position of the actual sample data in the file. (need to be multiplied by 16 first)
-			smpLen        -- Length of the actual sample data.
-			smpLoopStart  -- .
-			smpLoopEnd    -- .
-			volume        -- Sample volume.
-			packingScheme -- Usually 0 for unpacked, can be 1 for DP30 ADPCM encoded...
-			looping       -- If true, the sample loops.
-			c4speed       -- "Base" playback rate of the sample.
-			name          -- The sample name.
-			data          -- Loaded samplepoints, the sample proper.
+		order[]                    - 0x00..orderCount
+			*                      - 0x00..patternCount
 
-	patterns     -- Array holding pattern data.
-			row            -- Holds column data from one row.
-				channel       -- Holds cell data from one column. (and row)
-					note         -- false, '^^', or numeric (12*15 possible values for 12 notes and 15 octaves...)
-					instrument   -- Number.
-					volumecmd    -- Volume column value.
-					effectcmd    -- Effect column command.
-					effectprm    -- Effect column parameter.
+		sample[]                   - 0x00..sampleCount
+			type                   - 0 (Empty),1 (Sampler),2 (AdLib Melody), ?
+			filename               - string[12]
+			volume                 - 0x00..0x40
+			c4speed                - 0x0000..0xFFFF
+			name                   - string[27+1]
+			-- type == 1 (Sampler)
+			wfOffset               - memory offset not important for p.routine
+			length                 - length of waveform data
+			loopStart              - 0x0000..0xFFFF
+			loopEnd                - 0x0000..0xFFFF
+			packingScheme          - Unpacked (0), DP30ADPCM (1), Unknown (...)
+			looped                 - boolean
+			channelCount           - 1, 2
+			bitDepth               - 8, 16
+			data                   - SoundData
+			-- type == 2 (AdLib Melodic)
+			additiveSynthesis      - TBD
+			modulationFeedback     - TBD
+			carFrequencyMultiplier - TBD
+			carEnvelopeScaling     - TBD
+			carSustainSound        - TBD
+			carVibrato             - TBD
+			carTremolo             - TBD
+			carVolume              - TBD
+			carLevelScale          - TBD
+			carAttack              - TBD
+			carDecay               - TBD
+			carSustain             - TBD
+			carRelease             - TBD
+			carWaveform            - TBD
+			modFrequencyMultiplier - TBD
+			modEnvelopeScaling     - TBD
+			modSustainSound        - TBD
+			modVibrato             - TBD
+			modTremolo             - TBD
+			modVolume              - TBD
+			modLevelScale          - TBD
+			modAttack              - TBD
+			modDecay               - TBD
+			modSustain             - TBD
+			modRelease             - TBD
+			modWaveform            - TBD
 
+		pattern[]                  - 0x00..patternCount
+			row[]                  - 0x00..0x3F
+				channel[]          - 0x00..channelCount
+					note           - 0x00..0xFF
+					instrument     - 0x00..0xFF
+					volume         - 0x00..0x3F
+					effectCommand  - 0x00..0xFF
+					effectData     - 0x00..0xFF
 --]]
 
--- Expose this inside the structure...
-local printp_s3m = function(row, nchan, console)
+local util = require('util')
+local log = require('log')
 
-	local NOTE = {[0] = 'C-', 'C#', 'D-', 'D#', 'E-', 'F-', 'F#', 'G-', 'G#', 'A-', 'A#', 'B-'}
-
-	local numcols = 0; for k,v in pairs(row) do numcols = numcols + 1 end
-
-	if numcols > 0 then
-		local vis = {}
-		for k = 0, nchan-1 do
-			if not row[k] then
-				table.insert(vis,'|')
-				table.insert(vis, '... .. .. ...')
-			else
-				table.insert(vis, '|')
-				if row[k].note then
-					if type(row[k].note) == 'string' then
-						table.insert(vis, row[k].note)
-					else
-						local note = NOTE[row[k].note%12] .. tostring(math.floor(row[k].note/12)+1)
-						table.insert(vis, note)
-					end
-				else
-					table.insert(vis, '...')
-				end
-				table.insert(vis, ' ')
-				if row[k].instrument then
-					table.insert(vis, (('%02d'):format(row[k].instrument)))
-				else
-					table.insert(vis, '..')
-				end
-				table.insert(vis, ' ')
-				if row[k].volumecmd then
-					table.insert(vis, (('%02d'):format(row[k].volumecmd)))
-				else
-					table.insert(vis, '..')
-				end
-				table.insert(vis, ' ')
-				if row[k].effectcmd then
-					table.insert(vis, string.char(string.byte('A')+row[k].effectcmd-1))
-				else
-					table.insert(vis, '.')
-				end
-				if row[k].effectprm then
-					table.insert(vis, (('%02X'):format(row[k].effectprm)))
-				else
-					table.insert(vis, '..')
-				end
-			end
-		end
-		table.insert(vis, '|')
-
-		if console then
-			log(table.concat(vis))
-		else
-			return table.concat(vis)
-		end
-	else
-		-- visualize an empty row
-		local vis = {}
-			for i = 0, nchan-1 do
-				table.insert(vis,'|')
-				table.insert(vis, '... .. .. ...')
-			end
-			table.insert(vis,'|')
-
-		if console then
-			log(table.concat(vis))
-		else
-			return table.concat(vis)
-		end
-	end
-end
+local errorString = {
+	--[[1]] "File FourCC at 0x2C isn't 'SCRM'.",
+	--[[2]] "Early end-of-file in header.",
+	--[[3]] "Invalid module sample format.",
+	--[[4]] "Early end-of-file in channel properities.",
+	--[[5]] "Early end-of-file in order list.",
+	--[[6]] "Early end-of-file in sample parapointer list.",
+	--[[7]] "Early end-of-file in pattern parapointer list.",
+	--[[8]] "Early end-of-file in default panning definition list.",
+	--[[9]] "Early end-of-file in sample blocks.",
+	--[[A]] "Sampler block signature was not SCRS.",
+	--[[B]] "Sampler block alignment failure.",
+	--[[C]] "AdLib block signature was not SCRI.",
+	--[[D]] "AdLib block alignment failure.",
+	--[[E]] "Early end-of-file in pattern blocks.",
+	--[[F]] "Early end-of-file in sample waveform data blocks.",
+}
 
 local load_s3m = function(file)
-
-	log("-- ScreamTracker3 S3M loader --\n")
-
-	-- The table where all the data will live.
+	log("--  Scream Tracker 3 S3M loader  --\n\n")
 	local structure = {}
-
-	-- Here on through comes the fun part!
 	file:open('r')
 
-	---------------------------------------------------------------------------
-	-- Read in general information.
-	---------------------------------------------------------------------------
+	--[[Header]]--
 
-	-- Check for s3m header.
-	file:seek(44) -- 0x2C
-	local header = file:read(4)
-	if header ~= 'SCRM' then
-		log("Invalid header '%s' (%s)", header, util.str2hex(header))
-		return false
-	end
+	file:seek(44)
+	local formatstring = file:read(4)
+	if formatstring ~= "SCRM" then return false, errorString[1] end
+	log("SCRM FourCC detected at 0x2C.\n")
 
-	-- 0x00: Module title.
+	local v,n
+
 	file:seek(0)
-	structure.title = file:read(28)
-	log("Title: '%s' (%s)", structure.title, util.str2hex(structure.title))
+	v, n = file:read(28); if n ~= 28 then return false, errorString[2] end
+	structure.title = v
+	log("Title: '%s' (%s)\n", structure.title,
+		util.str2hex(structure.title, ' '))
 
-	-- Other miscellanous information; these aren't retained in memory. (0x1C, 0x1D)
-	local eof = file:read(1)
-	log("Should be 0x1A, DOS TYPE command EOF marker: (%s)", util.str2hex(eof))
-
-	local typ = file:read(1)
-	log("If 0x10 then it is a ScreamTracker 3 module: (%s)", util.str2hex(typ))
-
-	-- Ignore the next two bytes (or one short), they were for an expansion that never came...
-	-- TODO: Should we actually see if they're 0x00 0x00 ?
-	file:read(2)
-
-	-- 0x20: Number of orders.
-	structure.ordNum = util.bin2num(file:read(2), 'LE')
-	log("Number of orders: %d", structure.ordNum)
-	if structure.ordNum > 256 then
-		log("Number of orders greater than 256, fixing value to 256.")
-		structure.ordNum = 256
+	v, n = file:read(1); if n ~= 1 then return false, errorString[2] end
+	if v ~= '\x1A' then
+		log("DOS TYPE command EOF marker was '0x%s'; should have been 0x1A.\n",
+			util.str2hex(v))
 	end
 
-	-- 0x22: Number of instruments. Technical limit is 99, but as far as i read back, no tracker ever supported more
-	-- than 32 back then.
-	structure.insNum = util.bin2num(file:read(2), 'LE')
-	log("Number of samples: %d", structure.insNum)
-	if structure.insNum > 99 then
-		log("Number of samples greater than 99, fixing value to 99.")
-		structure.insNum = 99
+	v, n = file:read(1); if n ~= 1 then return false, errorString[2] end
+	if v ~= '\x10' then
+		log("File type was '0x%s'; should have been 0x10.\n",
+			util.str2hex(v))
 	end
 
-	-- 0x24: Number of patterns.
-	structure.patNum = util.bin2num(file:read(2), 'LE')
-	log("Number of patterns: %d", structure.patNum)
-	if structure.patNum > 100 then
-		log("Number of patterns greater than 100, fixing value to 100.")
-		structure.patNum = 100
+	v, n = file:read(2); if n ~= 2 then return false, errorString[2] end
+	if v ~= "\0\0" then
+		log("Unused expansion bytes '0x%s 0x%s' not the expected 0x00 0x00.\n",
+			util.str2hex(v:sub(1,1)), util.str2hex(v:sub(2,2)))
 	end
 
-	-- 0x26: Miscellaneous flags, most of them are ST3 specific, that doesn't affect playback. TODO
-	--   1 - st2vibrato (not supported in st3.01)
-	--   2 - st2tempo (not supported in st3.01)
-	--   4 - amigaslides (not supported in st3.01) //probably logarithmic slides instead of linear? -zorg
-	--   8 - 0-volume optimalizations: Automatically turn off looping notes whose volume is 0 for >2 note rows. Nope.
-	--  16 - amiga limits + amiga compat issues...
-	--  32 - enable filter/sfx (not supported) //amiga filter (simulation/emulation)? -zorg
-	--  64 - ST3.00 volslides (a cwt value of 1300 also should set this if it isn't...) - Dxx -> 0th tick enabled too.
-	-- 128 - 
-	local flags = util.bin2flags(file:read(2), 'LE')
+	v, n = file:read(2); if n ~= 2 then return false, errorString[2] end
+	structure.orderCount = util.bin2num(v, 'LE')
+	log("Order count:      0x%04X", structure.orderCount)
+	if structure.orderCount > 255 then
+		log(" (larger than the maximum of 0xFF)") -- TODO: Verify this #.
+	end
+	if structure.orderCount % 2 ~= 0 then
+		log(" (not even!)") -- TODO: Can ST3 load odd-order count modules?
+	end
+	log("\n")
 
-	-- 0x28: Created with tracker / version (CWT/V)
-	-- 0x1300 - ST3.00 - volslides happen on every frame, not just non-T0 frames!
-	-- 0x1301, 03, 20 -- ST3.01, 03, 20 - otherwise.
-	local cwtv = util.bin2num(file:read(2), 'LE')
-	log("Created With/Tracker Version: %X",cwtv)
-	if  cwtv == 0x1300 then structure.version = '3.00' elseif
-		cwtv == 0x1301 then structure.version = '3.01' elseif
-		cwtv == 0x1303 then structure.version = '3.03' elseif
-		cwtv == 0x1310 then structure.version = '3.10' elseif
-		cwtv == 0x1320 then structure.version = '3.20' else
-		structure.version = '?'
+	v, n = file:read(2); if n ~= 2 then return false, errorString[2] end
+	structure.sampleCount = util.bin2num(v, 'LE')
+	log("Sample count: 0x%04X", structure.sampleCount)
+	if structure.sampleCount > 99 then
+		log(" (larger than the maximum of 0x63)") -- TODO: Verify this #.
+	end
+	log("\n")
+
+	v, n = file:read(2); if n ~= 2 then return false, errorString[2] end
+	structure.patternCount = util.bin2num(v, 'LE')
+	log("Pattern count:    0x%04X", structure.patternCount)
+	if structure.patternCount > 100 then
+		log(" (larger than the maximum of 0x64)") -- TODO: Verify this #.
+	end
+	log("\n")
+
+	v, n = file:read(2); if n ~= 2 then return false, errorString[2] end
+	v = util.bin2flags(v)
+	structure.killSilentLoops = v[4]
+	structure.amigaNoteLimits = v[5]
+	structure.fastVolSlides   = v[7]
+	log("Flag   1 - ST2 Vibrato:            %s\n", (v[1]==true and 'Y' or 'N'))
+	log("Flag   2 - ST2 Tempo:              %s\n", (v[2]==true and 'Y' or 'N'))
+	log("Flag   4 - Amiga Slides:           %s\n", (v[3]==true and 'Y' or 'N'))
+	log("Flag   8 - 0-Vol. Optimalizations: %s\n", (v[4]==true and 'Y' or 'N'))
+	log("Flag  16 - Amiga Note Limits:      %s\n", (v[5]==true and 'Y' or 'N'))
+	log("Flag  32 - Enable Filter/SFX:      %s\n", (v[6]==true and 'Y' or 'N'))
+	log("Flag  64 - Fast ST 3.00 VolSlides: %s\n", (v[7]==true and 'Y' or 'N'))
+	log("Flag 128 - Custom Data Defined:    %s\n", (v[8]==true and 'Y' or 'N'))
+
+	v, n = file:read(2); if n ~= 2 then return false, errorString[2] end
+	v = util.bin2num(v, 'LE')
+	log("Created with tracker version %X\n", v)
+	if  v == 0x1300 then
+		structure.version = '3.00'
+		structure.fastVolSlides = true
+	elseif
+		v == 0x1301 then structure.version = '3.01' elseif
+		v == 0x1303 then structure.version = '3.03' elseif
+		v == 0x1310 then structure.version = '3.10' elseif
+		v == 0x1320 then structure.version = '3.20' else
+		                    structure.version = '?.??'
 	end
 
-	-- 0x2A: Sample Format -- 1: signed, 2: unsigned (2 is the usual case)
-	-- We don't necessarily need to store this info. //Especially since it's module-global :/ -zorg
-	local smpf = util.bin2num(file:read(2), 'LE')
-	if smpf == 1 then
-		log("Sample format:   signed")
-	elseif smpf == 2 then
-		log("Sample format: unsigned")
-	else
-		log("Sample format unknown or errorenous; setting to unsigned.")
-		smpf = 2
+	v, n = file:read(2); if n ~= 2 then return false, errorString[2] end
+	v = util.bin2num(v, 'LE')
+	if  v == 1 then structure.sampleFormat = 'Signed' elseif
+		v == 2 then structure.sampleFormat = 'Unsigned' else
+		return false, errorString[3]
 	end
+	log("Sample format: %s\n", structure.sampleFormat)
 
-	-- 0x2C: Skip header, since we already dealt with it.
+	-- Skip FourCC
 	file:read(4)
 
-	-- 0x30: Global volume: finalvol = vol[track] * (globalvol / 64)
-	structure.globalVolume = util.bin2num(file:read(1))
-	log("Global volume: %d", structure.globalVolume)
+	v, n = file:read(1); if n ~= 1 then return false, errorString[2] end
+	structure.globalVolume = util.bin2num(v)
+	log("Global volume:  0x%02X", structure.globalVolume)
+	if structure.globalVolume > 0x40 then
+		log(" (larger than the maximum of 64)")
+	end
+	log("\n")
 
-	-- 0x31: Initial speed. (6 in mods)
-	structure.initialSpeed = util.bin2num(file:read(1))
-	log("Initial speed: %d", structure.initialSpeed)
+	v, n = file:read(1); if n ~= 1 then return false, errorString[2] end
+	structure.initialSpeed = util.bin2num(v)
+	log("Initial speed:  0x%02X", structure.initialSpeed)
+	if structure.initialSpeed > 0x1F then -- TODO: Get value limits!
+		log(" (larger than the maximum of 31)")
+	end
+	log("\n")
 
-	-- 0x32: Initial tempo. (125 in mods)
-	structure.initialTempo = util.bin2num(file:read(1))
-	log("Initial tempo: %d", structure.initialTempo)
+	v, n = file:read(1); if n ~= 1 then return false, errorString[2] end
+	structure.initialTempo = util.bin2num(v)
+	log("Initial tempo:  0x%02X", structure.initialTempo)
+	if structure.initialTempo < 0x20 then -- TODO: Get value limits!
+		log(" (smaller than the minimum of 32)")
+	end
+	log("\n")
 
-	-- 0x33: Master volume: lower 7 bits are the volume, the 8th is whether mono (0) or stereo (1).
-	-- TODO: is this correct?
-	local mvol = util.bin2num(file:read(1))
-	structure.isStereo = math.floor(mvol / 128) == 1 and true or false
-	structure.masterVolume = mvol>127 and mvol-128 or mvol -- This could probably be expressed in a nicer way.
-	log("Master volume: %d", structure.masterVolume)
-	log("Panning mode:  %s", (structure.isStereo and 'Stereo' or 'Mono'))
+	v, n = file:read(1); if n ~= 1 then return false, errorString[2] end
+	v = util.bin2num(v)
+	structure.isStereo     = (math.floor(v/128)==1)
+	structure.masterVolume = (v>127 and v-128 or v)
+	log("Master volume:  0x%02X\n", structure.masterVolume)
+	log("Output channels: %s\n", (structure.isStereo and 'Stereo' or 'Mono'))
 
-	-- 0x34: UltraClick removal: st3 specific, forget it.
+	-- Skip UltraClick removal
 	file:read(1)
 
-	-- 0x35: Default panning: misleading name, if 252, then values are stored for each channel, else skip.
-	local dpan = util.bin2num(file:read(1))
-	if dpan == 252 then
-		structure.defaultPan = true
-	else
-		structure.defaultPan = false
-	end
-	log("Per-channel panning: %s", (structure.defaultPan and 'defined' or 'not defined'))
+	local initialPanning
+	v, n = file:read(1); if n ~= 1 then return false, errorString[2] end
+	if v == '\xFC' then initialPanning = true else initialPanning = false end
+	log("Initial channel panning values %s.\n\n",
+		(initialPanning and 'defined' or 'undefined'))
 
-	-- 0x36: Expansion bytes, ignorable.
+	-- Skip Expansion bytes
 	file:read(8)
 
-	-- 0x3E: Special pointer, not really used, flag usually not set either.
+	-- Skip Special pointer
 	file:read(2)
 
-	---------------------------------------------------------------------------
-	-- Calculate channel map.
-	---------------------------------------------------------------------------
+	--[[Channel structure]]--
 
-	-- Channels: Oh boy... so, count is not stored, but the state of them is... separately.
-	-- Is it okay to not store the data for all channels? not like it uses THAT much memory...?
-	-- (runtime channels use 35bytes worth of useful data, maybe a bit less...)
-	-- In other words, even disabled channels may get stored in s3m files, but they won't be present in this field.
-	-- Question is, why shouldn't we load in the disabled channels' data as well?
-	-- Maybe we'd find some neat things hidden there...
-	structure.channelMap = {}
-	structure.channelPan = {}
-	log('Loading channel map...\n')
-	local pos = 0
-	for i = 0, 31 do
-		local n = util.bin2num(file:read(1))
-		-- OPL stuff if >= 16... 255 means it's disabled.
-		-- Alternatively, OPL channels go from 8 to 30. (9 L melo, 9 R melo, 5 drum), and 128 is the disabled flag.
-		if n < 16 then
-			structure.channelMap[i] = pos
-			log("    Channel %d mapped to %d. (type %d)", i, pos, n)
-			pos = pos + 1
-			-- Not panning levels, only "orientation"...
-			if n <= 7 then
-				structure.channelPan[i] = 0x3 -- L; 0x33 according to OpenMPT src, 0x3 according to FireLight tutorial.
-			else
-				structure.channelPan[i] = 0xC -- R; 0xCC according to OpenMPT src, 0xC according to FireLight tutorial.
-			end
-		end
-		-- Non-valid ones don't map to any channel, so they be nil... that is, until it's revealed that the code
-		-- should support OPL stuff...
-	end
-	structure.chnNum = pos
-	log("Channel count: %d", structure.chnNum)
-
-	log('')
-
-	---------------------------------------------------------------------------
-	-- Order data loading and pattern count verification.
-	---------------------------------------------------------------------------
-
-	-- Initialize order list.
-	structure.orders = {}
-	for i=0,255 do
-		structure.orders[i] = 255
-	end
-	log("Order list initialized, loading in order data...")
-
-	-- Load in order data. (254 is skip, 255 is empty)
-	for i = 0, structure.ordNum-1 do
-		structure.orders[i] = util.bin2num(file:read(1))
-		log("Order #%d (%X): %d", i, i, structure.orders[i])
-	end
-
-	-- Fix pattern count. (Needed? Playroutine could just skip over marker (254) patterns, and stop at the first (255).)
-	local oldPatNum = structure.patNum -- Needed for parapointer traversal.
-	local oldOrdNum = structure.ordNum -- Not really needed anymore, just for comparing below.
-	local actual = 0
-	structure.patNum = 0
-	for i = 0, structure.ordNum-1 do
-		if structure.orders[i] < 254 then
-			structure.orders[actual] = structure.orders[i]
-			actual = actual + 1
-			if structure.orders[i] > structure.patNum then
-				structure.patNum = structure.orders[i]
-			end
-		end
-	end
-	structure.ordNum = actual
-	log("Fixed order #:   %d (was %d)", structure.ordNum, oldOrdNum)
-	log("Fixed pattern #: %d (was %d)", structure.patNum, oldPatNum)
-
-	log('')
-
-	---------------------------------------------------------------------------
-	-- Read in parapointers.
-	---------------------------------------------------------------------------
-
-	-- TL Note: Parapointers are technically named after assembly paragraph pointers,
-	-- since they're on 16 byte boundaries.
-
-	-- Read instrument parapointers.
-	local pptrSmp = {} -- max.  99, as before
-	for i = 0, structure.insNum-1 do
-		pptrSmp[i] = util.bin2num(file:read(2), 'LE') * 16 -- <<4 (*16) for true seekable locations.
-	end
-	log("Loaded instrument parapointers.")
-
-	-- Read pattern parapointers.
-	local pptrPat = {} -- max. 100, as before
-	for i = 0, oldPatNum-1 do
-		pptrPat[i] = util.bin2num(file:read(2), 'LE') * 16 -- Same as above.
-	end
-	log("Loaded pattern parapointers.")
-
-	-- If defined, read default pan positions for each channel; [0,F]
-	if structure.defaultPan then
-		structure.defaultPan = {} -- //OpenMPT seems to treat both pan tables as one... -zorg
-		for i = 0, 31 do
-			structure.defaultPan[i] = util.bin2num(file:read(1)) % 16 -- == x && 0xF, top nibble is garbage.
-			-- If we previously detected that the module is mono, overrule panning to center.
-			if not structure.isStereo then structure.defaultPan[i] = 7 end -- bit off to the left tho...
-			log("Channel %d (%X) panning set to %d (%X).", i, i, structure.defaultPan[i], structure.defaultPan[i])
-		end
-	else
-		log("Default panning table  doesn't exist.")
-	end
-
-	log('')
-
-	---------------------------------------------------------------------------
-	-- Read in instrument data.
-	---------------------------------------------------------------------------
-
-	structure.instruments = {}
-	log('Loading in instrument data...')
-
-	for i = 0, structure.insNum-1 do
-		
-		local instrument = {}
-		log('')
-
-		-- Go to start of instrument block.
-		file:seek(pptrSmp[i])
-		log("Seeked to %X", pptrSmp[i])
-
-		-- +0x00: Instrument format.
-		instrument.type = util.bin2num(file:read(1))
-		log("Sample %d type: %d (%s)", i, instrument.type,
-			instrument.type == 1 and "Sampler" or (
-				instrument.type == 0 and "Empty" or "Other"))
-		
-		if instrument.type == 1 then -- Sampler
-
-			-- Validate that we're really inside an instrument block.
-			file:seek(pptrSmp[i] + 76)
-			local header = file:read(4)
-			log("Instrument header should be SCRS: %s", header)
-			if header ~= 'SCRS' then
-				-- Invalid header, set instrument to empty, and go to next one...
-				instrument.type = 0
-				structure.instruments[i] = instrument
-				break
-			end
-
-			-- We already read in the type byte.
-			file:seek(pptrSmp[i] + 1)
-
-			-- +0x01: DOS filename.
-			instrument.filename = file:read(12)
-			log("Sample #%d (%X) DOS filename: %s", i, i, instrument.filename)
-
-			-- +0x0D: Sample position.
-			local a,b,c = util.bin2num(file:read(1)), util.bin2num(file:read(1)), util.bin2num(file:read(1))
-			-- sample_pos = (a SHL 16) + ((c SHL 8) + b)
-			instrument.memPos = b * 0x10 + c * 0x1000 + a * 0x100000 -- UL -> 32bit ok FIX LATER
-			-- This one doesn't need to be multiplied by 16 / shifted left by 4!
-			log("Sample position: (%X)", instrument.memPos)
-
-			-- +0x10: Sample length.
-			instrument.smpLen = util.bin2num(file:read(2), 'LE')
-			file:read(2) -- This short is not used since st3 only supports 64k max samplesizes.
-			if instrument.smpLen > 64000 then
-				log("Sample length of %d is bigger than 64k! Truncating...", instrument.smpLen)
-				instrument.smpLen = 64000
-			else
-				log("Sample length: %d", instrument.smpLen)
-			end
-
-			-- +0x14: Sample loop start point.
-			instrument.smpLoopStart = util.bin2num(file:read(2), 'LE')
-			file:read(2) -- This short is not used since st3 only supports 64k max samplesizes.
-			log("Loop start point: %d", instrument.smpLoopStart)
-
-			-- +0x18: Sample loop end point.
-			instrument.smpLoopEnd = util.bin2num(file:read(2), 'LE')
-			file:read(2) -- This short is not used since st3 only supports 64k max samplesizes.
-			log("Loop end point:   %d", instrument.smpLoopEnd)
-
-			-- +0x1C: Sample volume.
-			instrument.volume = util.bin2num(file:read(1))
-			log("Sample volume: %d (%X)", instrument.volume, instrument.volume)
-
-			-- +0x1D: Unused, skip.
-			file:read(1)
-
-			-- +0x1E: Packing scheme. (should always be 0)
-			instrument.packingScheme = util.bin2num(file:read(1))
-			-- if 1 then DP30ADPCM else unpacked (raw).
-			log("Packing scheme: %s",
-				instrument.packingScheme == 0 and 'Unpacked' or (
-					instrument.packingScheme == 1 and 'DP30ADPCM' or 'Unknown'))
-
-			-- +0x1F: Flags
-			local flags = util.bin2num(file:read(1))
-			log("Flags: %X", flags)
-			-- only one is implemented, looping.
-			-- 1 looping
-			-- 2 stereo sample (unsupported)
-			-- 4 16bit sample (unsupported)
-			if flags == 1 then
-				instrument.looping = true
-			else
-				instrument.looping = false
-			end
-			log("Sample loop: %s", instrument.looping and 'Enabled' or 'Disabled')
-
-			-- +0x20: c2spd (c4spd in reality)
-			instrument.c4speed = util.bin2num(file:read(2), 'LE')
-			file:read(2) -- This short is not used.
-			log("C4 Speed: %d", instrument.c4speed)
-
-			-- Skip more irrelevant (nowadays anyway) bytes. (GUS sample data positioning, etc.)
-			file:read(12)
-
-			-- +0x30:Sample name
-			instrument.name = file:read(28)
-			log("Sample name: %s", instrument.name)
-
-			-- Verification
-			--print(("Should be the header again: %s"):format(file:read(4)))
-
-			-- We read in the actual sample data after the patterns.
-
-		elseif instrument.type == 0 then
-			-- Empty.
+	structure.channel = {}
+	local position = 0
+	for ch = 0, 31 do
+		local channel = {}
+		v, n = file:read(1); if n ~= 1 then return false, errorString[4] end
+		v = util.bin2num(v)
+		channel.enabled = (math.floor(v/128)==0)
+		if channel.enabled then
+			channel.map = position; position = position + 1
 		else
-			-- Skip OPL2 for now.
+			channel.map = false
 		end
+		v = v%128
+		if     v <  16 then
+			channel.type = 'Sampler'
+			channel.pan = (v<8 and 0x3 or 0xC)
+		elseif v <  32 then -- 30, actually.
+			channel.type = (v<=24 and 'AdLib Melody' or 'AdLib Drum')
+			channel.pan = 0x7
+		else
+			channel.type = 'Unknown'
+			channel.pan = 0x7
+		end
+		log("Channel 0x%02X (%s) panning 0x%01X mapped to ",
+			ch, channel.type, channel.pan)
+		if channel.map then
+			log("0x%02X\n", channel.map)
+		else
+			log("nothing\n")
+		end
+		structure.channel[ch] = channel
+	end
+	structure.channelCount = position
+	log("Total enabled channels: %d\n\n", structure.channelCount)
 
-		-- Assign the local to our module structure table.
-		structure.instruments[i] = instrument
-		
+	--[[Order list]]--
+
+	structure.order = {}
+	log("Orders:\n")
+	local cols = 0
+	for ord = 0, structure.orderCount-1 do
+		v, n = file:read(1); if n ~= 1 then return false, errorString[5] end
+		structure.order[ord] = util.bin2num(v)
+		log("0x%02X ", structure.order[ord])
+		cols = cols + 1; if cols == 16 then log("\n") cols = 0 end
+	end
+	log("\n\n")
+
+	--[[Pointer lists]]--
+
+	local headerEnd = 64 + 32 + structure.orderCount +
+	                            structure.sampleCount +
+	                            structure.patternCount
+
+	-- Read paragraph (16-byte aligned) pointers; stored as byte offsets.
+	local paraptrSmp = {}
+	for i = 0, structure.sampleCount-1 do
+		v, n = file:read(2); if n ~= 2 then return false, errorString[6] end
+		paraptrSmp[i] = util.bin2num(v, 'LE') * 0x10
+		log("Sample 0x%04X offset at %06X", i, paraptrSmp[i])
+		if paraptrSmp[i] < headerEnd then
+			log(" (Offset less than end of header!)")
+		end
+		log("\n")
+	end
+	log("\n")
+	local paraptrPat = {}
+	for i = 0, structure.patternCount-1 do
+		v, n = file:read(2); if n ~= 2 then return false, errorString[7] end
+		paraptrPat[i] = util.bin2num(v, 'LE') * 0x10
+		log("Pattern 0x%04X offset at %06X", i, paraptrPat[i])
+		if paraptrPat[i] < headerEnd then
+			log(" (Offset less than end of header!)")
+		end
+		log("\n")
+	end
+	log("\n")
+
+	--[[Channel Panning list]]--
+
+	if initialPanning then for ch = 0, 31 do
+		v, n = file:read(1); if n ~= 1 then return false, errorString[8] end
+		v = util.bin2num(v) % 0x10 -- High nibble is garbage.
+		structure.channel[ch].pan = structure.isStereo and v or 0x7
+		log("Channel 0x%02X fixed panning value to 0x%01X\n",
+			ch, structure.channel[ch].pan)
+	end log("\n\n") end
+
+	--[[Samples]]--
+
+	local sampleType = {[0] = 'Unused', 'Sampler', 'AdLib Melody',
+		'AdLib Bassdrum', 'AdLib Snare', 'AdLib Tom', 'AdLib Cymball',
+		'AdLib Hihat'}
+
+	local packingScheme = {[0] = 'Unpacked', 'DP30ADPCM'}
+
+	structure.sample = {}
+	for smp = 0, structure.sampleCount-1 do
+		local sample = {}
+		file:seek(paraptrSmp[smp])
+		log("Sample 0x%04X at 0x%06X\n", smp, paraptrSmp[smp])
+		v, n = file:read(1); if n ~= 1 then return false, errorString[9] end
+		sample.type = util.bin2num(v)
+		log("    %s\n",
+			sample.type < 8 and sampleType[sample.type] or 'Unknown')
+		v, n = file:read(12); if n ~= 12 then return false, errorString[9] end
+		sample.filename = v
+		log("    DOS filename '%s' (%s)\n", sample.filename,
+			util.str2hex(sample.filename, ' '))
+		if sample.type == 0 then
+			-- Empty slot
+		elseif sample.type == 1 then
+			-- Sampler
+			file:seek(paraptrSmp[smp] + 0x4C)
+			v, n = file:read(4)
+			if n ~= 4 then return false, errorString[9] end
+			if v ~= 'SCRS' then return false, errorString[10] end
+			file:seek(paraptrSmp[smp] + 13)
+			v, n = file:read(1)
+			if n ~= 1 then return false, errorString[9] end
+			sample.wfOffset = util.bin2num(v) * 0x10000
+			v, n = file:read(2)
+			if n ~= 2 then return false, errorString[9] end
+			sample.wfOffset = sample.wfOffset + util.bin2num(v, 'LE')
+			log("    Waveform Offset 0x%06X\n", sample.wfOffset)
+			v, n = file:read(4) -- Format only uses first two bytes though.
+			if n ~= 4 then return false, errorString[9] end
+			sample.length = util.bin2num(v, 'LE')
+			log("    Length          0x%08X", sample.length)
+			if sample.length > 64000 then
+				sample.length = 64000
+				log(" (truncated to 64k)")
+			end
+			log("\n")
+			v, n = file:read(4) -- Format only uses first two bytes though.
+			if n ~= 4 then return false, errorString[9] end
+			sample.loopStart = util.bin2num(v, 'LE')
+			log("    LoopStart:      0x%08X", sample.loopStart)
+			if sample.loopStart > 0xFFFF then
+				log(" (Larger than 2 bytes) ")
+			end
+			log("\n")
+			v, n = file:read(4) -- Format only uses first two bytes though.
+			if n ~= 4 then return false, errorString[9] end
+			sample.loopEnd = util.bin2num(v, 'LE')
+			log("    LoopEnd:        0x%08X", sample.loopEnd)
+			if sample.loopStart > 0xFFFF then
+				log(" (Larger than 2 bytes)")
+			end
+			log("\n")
+			v, n = file:read(1)
+			if n ~= 1 then return false, errorString[9] end
+			sample.volume = util.bin2num(v)
+			log("    Volume:         0x%02X\n", sample.volume)
+			file:read(1) -- Skip unused byte.
+			v, n = file:read(1)
+			if n ~= 1 then return false, errorString[9] end
+			sample.packingScheme = util.bin2num(v)
+			log("    Packing scheme '%s'\n",
+				sample.packingScheme < 2 and
+				packingScheme[sample.packingScheme] or 'Unknown')
+			v, n = file:read(1)
+			if n ~= 1 then return false, errorString[9] end
+			v = util.bin2flags(v)
+			sample.looped       = v[1] == 1
+			sample.channelCount = v[2] and  2 or 1
+			sample.bitDepth     = v[3] and 16 or 8
+			log("    Flag   1 - Looped: %1s \n", (v[1]==true and 'Y' or 'N'))
+			log("    Flag   2 - Stereo: %1s \n", (v[2]==true and 'Y' or 'N'))
+			log("    Flag   4 - 16-bit: %1s \n", (v[3]==true and 'Y' or 'N'))
+			log("    Flag   8 - Unused (%1s)\n", (v[4]==true and 'Y' or 'N'))
+			log("    Flag  16 - Unused (%1s)\n", (v[5]==true and 'Y' or 'N'))
+			log("    Flag  32 - Unused (%1s)\n", (v[6]==true and 'Y' or 'N'))
+			log("    Flag  64 - Unused (%1s)\n", (v[7]==true and 'Y' or 'N'))
+			log("    Flag 128 - Unused (%1s)\n", (v[8]==true and 'Y' or 'N'))
+			v, n = file:read(4)
+			if n ~= 4 then return false, errorString[9] end
+			sample.c4speed = util.bin2num(v, 'LE') -- C2spd originally.
+			log("    C4 speed: 0x%08X (%d)\n", sample.c4speed, sample.c4speed)
+			file:read(4) -- Skip unused bytes.
+			v, n = file:read(2)
+			if n ~= 2 then return false, errorString[9] end
+			log("    Gravis U.S. memory address:  0x%04X\n",
+				util.bin2num(v, 'LE'))
+			v, n = file:read(2)
+			if n ~= 2 then return false, errorString[9] end
+			log("    SoundBlaster loop expansion: 0x%04X\n",
+				util.bin2num(v, 'LE'))
+			v, n = file:read(4)
+			if n ~= 4 then return false, errorString[9] end
+			log("    SoundBlaster last used pos.: 0x%08X\n",
+				util.bin2num(v, 'LE'))
+			v, n = file:read(28)
+			if n ~= 28 then return false, errorString[9] end
+			sample.name = v
+			log("    Sample name '%s' (%s)\n", sample.name,
+			util.str2hex(sample.name, ' '))
+			-- Verification
+			v, n = file:read(4);
+			if n ~= 4 then return false, errorString[9] end
+			if v ~= 'SCRS' then return false, errorString[11] end
+		elseif sample.type == 2 then
+			-- AdLib
+			file:seek(paraptrSmp[smp] + 0x4C)
+			v, n = file:read(4)
+			if n ~= 4 then return false, errorString[9] end
+			if v ~= 'SCRI' then return false, errorString[12] end
+			file:seek(paraptrSmp[smp] + 13)
+			v, n = file:read(3)
+			if n ~= 3 then return false, errorString[9] end
+			if v ~= '\0\0\0' then
+				log("    Mem offset wasn't zeroed: (%s)", util.str2hex(v, ' '))
+			end
+			v, n = file:read(1)
+			if n ~= 1 then return false, errorString[9] end
+			v = util.bin2num(v)
+			sample.modFrequencyMultiplier = v % 0x10; v = math.floor(v / 0x10)
+			sample.modEnvelopeScaling     = v % 0x2;  v = math.floor(v / 0x2)
+			sample.modSustainSound        = v % 0x2;  v = math.floor(v / 0x2)
+			sample.modVibrato             = v % 0x2;  v = math.floor(v / 0x2)
+			sample.modTremolo             = v % 0x2;
+			v, n = file:read(1)
+			if n ~= 1 then return false, errorString[9] end
+			v = util.bin2num(v)
+			sample.carFrequencyMultiplier = v % 0x10; v = math.floor(v / 0x10)
+			sample.carEnvelopeScaling     = v % 0x2;  v = math.floor(v / 0x2)
+			sample.carSustainSound        = v % 0x2;  v = math.floor(v / 0x2)
+			sample.carVibrato             = v % 0x2;  v = math.floor(v / 0x2)
+			sample.carTremolo             = v % 0x2;
+			v, n = file:read(1)
+			if n ~= 1 then return false, errorString[9] end
+			v = util.bin2num(v)
+			sample.modVolume = 0x3F - (v % 0x40); v = math.floor(v / 0x40)
+			local l2 = v % 0x2; v = math.floor(v / 0x2)
+			local l1 = v % 0x2;
+			sample.modLevelScale = l2 * 0x2 + l1
+			v, n = file:read(1)
+			if n ~= 1 then return false, errorString[9] end
+			v = util.bin2num(v)
+			sample.carVolume = 0x3F - (v % 0x40); v = math.floor(v / 0x40)
+			local l2 = v % 0x2; v = math.floor(v / 0x2)
+			local l1 = v % 0x2;
+			sample.carLevelScale = l2 * 0x2 + l1
+			v, n = file:read(1)
+			if n ~= 1 then return false, errorString[9] end
+			v = util.bin2num(v)
+			sample.modAttack = v % 0x10; v = math.floor(v / 0x10)
+			sample.modDecay  = v % 0x10;
+			v, n = file:read(1)
+			if n ~= 1 then return false, errorString[9] end
+			v = util.bin2num(v)
+			sample.carAttack = v % 0x10; v = math.floor(v / 0x10)
+			sample.carDecay  = v % 0x10;
+			v, n = file:read(1)
+			if n ~= 1 then return false, errorString[9] end
+			v = util.bin2num(v)
+			sample.modSustain = 0xF - (v % 0x10); v = math.floor(v / 0x10)
+			sample.modRelease = v % 0x10;
+			v, n = file:read(1)
+			if n ~= 1 then return false, errorString[9] end
+			v = util.bin2num(v)
+			sample.carSustain = 0xF - (v % 0x10); v = math.floor(v / 0x10)
+			sample.carRelease = v % 0x10;
+			v, n = file:read(1)
+			if n ~= 1 then return false, errorString[9] end
+			sample.modWaveform = util.bin2num(v)
+			v, n = file:read(1)
+			if n ~= 1 then return false, errorString[9] end
+			sample.carWaveform = util.bin2num(v)
+			v, n = file:read(1)
+			if n ~= 1 then return false, errorString[9] end
+			v = util.bin2num(v)
+			sample.additiveSynthesis  = v % 0x2;  v = math.floor(v / 0x2)
+			sample.modulationFeedback = v % 0x10; v = math.floor(v / 0x2)
+			v, n = file:read(1) -- Unused.
+			log("    Additive synthesis:  %s\n",
+				sample.additiveSynthesis == 1 and 'Y' or 'N')
+			log("    Modulation Feedback: %s\n",
+				sample.modulationFeedback == 1 and 'Y' or 'N')
+			log("             Carrier Modulator\n")
+			log("    Attack:     %02X       %02X\n",
+				sample.carAttack, sample.modAttack)
+			log("    Decay:      %02X       %02X\n",
+				sample.carDecay, sample.modDecay)
+			log("    Sustain:    %02X       %02X\n",
+				sample.carSustain, sample.modSustain)
+			log("    Release:    %02X       %02X\n",
+				sample.carRelease, sample.modRelease)
+			log("    Sustain:    %s        %s\n",
+				sample.carSustainSound == 1 and 'Y' or 'N',
+				sample.modSustainSound == 1 and 'Y' or 'N')
+			log("    Volume:     %02X       %02X\n",
+				sample.carVolume, sample.modVolume)
+			log("    EnvScale:   %s        %s\n",
+				sample.carEnvelopeScaling == 1 and 'Y' or 'N',
+				sample.modEnvelopeScaling == 1 and 'Y' or 'N')
+			log("    LvScale:    %01X        %01X\n",
+				sample.carLevelScale, sample.modLevelScale)
+			log("    FreqMul:    %02X       %02X\n",
+				sample.carFrequencyMultiplier, sample.modFrequencyMultiplier)
+			log("    Waveform:   %01X        %01X\n",
+				sample.carWaveform, sample.modWaveform)
+			log("    Vibrato:    %s        %s\n",
+				sample.carVibrato == 1 and 'Y' or 'N',
+				sample.modVibrato == 1 and 'Y' or 'N')
+			log("    Tremolo:    %s        %s\n",
+				sample.carTremolo == 1 and 'Y' or 'N',
+				sample.modTremolo == 1 and 'Y' or 'N')
+			v, n = file:read(1)
+			if n ~= 1 then return false, errorString[9] end
+			sample.volume = util.bin2num(v)
+			log("    Volume:  0x%02X\n", sample.volume)
+			v, n = file:read(1)
+			if n ~= 1 then return false, errorString[9] end
+			log("    DSK (?): 0x%02X\n", util.bin2num(v))
+			file:read(2) -- Skip unused bytes.
+			v, n = file:read(4)
+			if n ~= 4 then return false, errorString[9] end
+			sample.c4speed = util.bin2num(v, 'LE') -- C2spd originally.
+			log("    C4 speed: 0x%08X (%d)\n",
+				sample.c4speed, sample.c4speed)
+			file:read(12) -- Skip unused bytes.
+			v, n = file:read(28)
+			if n ~= 28 then return false, errorString[9] end
+			sample.name = v
+			log("    Sample name '%s' (%s)\n", sample.name,
+			util.str2hex(sample.name, ' '))
+			-- Verification
+			v, n = file:read(4);
+			if n ~= 4 then return false, errorString[9] end
+			if v ~= 'SCRI' then return false, errorString[13] end
+		end
+		log("\n")
+		structure.sample[smp] = sample
+	end
+	log("\n")
+
+	--[[Patterns]]--
+
+	local noteTf = function(n)
+		local symbol = {[0] = '-','#','-','#','-','-','#','-','#','-','#','-'}
+		local letter = {[0] = 'C', 'C', 'D', 'D', 'E', 'F', 'F', 'G', 'G', 'A',
+			'A', 'B'}
+		if n == 254 then
+			return '^^ '
+		elseif n == 255 then
+			return '...'
+		else
+			local class = n % 0x10
+			local oct = math.floor(n / 0x10) - 1
+			return ("%1s%1s%1X"):format(letter[class], symbol[class], oct)
+		end
 	end
 
-	log('')
-
-	---------------------------------------------------------------------------
-	-- Read in pattern data.
-	---------------------------------------------------------------------------
-
-	log("Loading in pattern data...")
-
-	-- structure: 1-1 bytes for note, inst, vol, fx func, fx param (5 in total)
-	-- * 64 rows
-	-- * structure.chnNum channels
-	-- * structure.numPtr patterns, in all
-
-	structure.patterns = {}
-
-	for i = 0, oldPatNum-1 do -- patterns
-
+	structure.pattern = {}
+	for pat = 0, structure.patternCount-1 do
 		local pattern = {}
-
-		-- Go to start of pattern block.
-		file:seek(pptrPat[i])
-		log("Pat %X; Seeked to %X", i, pptrPat[i])
-
-		-- We don't really need the packed size of the pattern blocks...
-		local pps = util.bin2num(file:read(2), 'LE')
-		log("Packed pattern size: %X", pps)
-
-		for j = 0, 63 do -- rows
-
-			--log("Row %X", j)
-
-			-- Holds row data
-			local row = {}
-
-			-- if r is 0, we reached the end of the row, else cols...
-			repeat
-
-				-- Read in the fields
-				local r  = util.bin2num(file:read(1))
-
-				-- If the byte is not empty...
-				if r ~= 0 then
-
-					local ch  = bit.band(r,  0x1F) -- % 32 -- channel #
-					--log("Chn %d", ch)
-
-					-- Check for data in unused channels
-					local dummy = false
-					if ch > structure.chnNum-1 then
-						--log("Data found in unused channel (%d)! Max is %d.", structure.channelMap[ch],
-						--     structure.chnNum)
-						dummy = true -- reads bytes but doesn't store them
-					end
-
-					-- Create entry for column (channel)
-					if not dummy then
-						row[structure.channelMap[ch]] = {}
-					end
-	
-					local ni  = bit.band(r,  32) -- further read note, instrument bytes
-					if ni == 32 then
-						--log("Found note & instrument byte!")
-						local note = util.bin2num(file:read(1))
-						local inst = util.bin2num(file:read(1))
-						if not dummy then
-							if note == 255 then
-								row[structure.channelMap[ch]].note = false
-							elseif note == 254 then
-								row[structure.channelMap[ch]].note = '^^ ' -- note cut (key off)
-							else
-								-- true note
-								row[structure.channelMap[ch]].note = bit.rshift(note,4)*12 +
-									bit.band(note, 0xF)
-							end
-							row[structure.channelMap[ch]].instrument = inst ~= 0 and inst or false  -- ...
-						end
-					else
-						-- No data
-						if not dummy then
-							row[structure.channelMap[ch]].note = false
-							row[structure.channelMap[ch]].instrument = false
-						end
-					end
-	
-					local vo  = bit.band(r,  64) -- further read volume col byte
-					if vo == 64 then
-						--log("Found volume column byte!")
-						local volc = util.bin2num(file:read(1))
-						if not dummy then
-							row[structure.channelMap[ch]].volumecmd = volc -- number, simple
-						end
-					else
-						-- No data
-						if not dummy then
-							row[structure.channelMap[ch]].volumecmd = false
-						end
-					end
-	
-					local fx  = bit.band(r, 128) -- further read fx col command and param bytes
-					if fx == 128 then
-						--log("Found effect column byte!")
-						local cmmnd = util.bin2num(file:read(1))
-						local param = util.bin2num(file:read(1))
-						if not dummy then
-							row[structure.channelMap[ch]].effectcmd = cmmnd -- number...for now
-							row[structure.channelMap[ch]].effectprm = param -- number, simple
-						end
-					else
-						-- No data
-						if not dummy then
-							row[structure.channelMap[ch]].effectcmd = false
-							row[structure.channelMap[ch]].effectprm = false
-						end
-					end
-				end
-
-			until (r == 0) -- Read in all channel data present in current row.
-
-			pattern[j] = row
-
-			-- This is for show.
-			--printp_s3m(row, structure.chnNum, true)
-
-		end -- rows
-
-		structure.patterns[i] = pattern
-
-	end -- patterns
-
-	log("Patterns loaded!")
-
-	log('')
-
-	---------------------------------------------------------------------------
-	-- Read in sample data.
-	---------------------------------------------------------------------------
-
-	for i = 0, structure.insNum-1 do
-
-		if structure.instruments[i].type == 1 then
-
-			file:seek(structure.instruments[i].memPos)
-			log("Seeked to %X", structure.instruments[i].memPos)
-
-			local len = structure.instruments[i].smpLen > 0 and structure.instruments[i].smpLen or 1 -- merp
-			structure.instruments[i].data = love.sound.newSoundData(len, 44100, 8, 1)
-
-			-- Faster to process inside RAM than to read in from disk byte-by-byte.
-			local buffer, cnt = file:read(len)
-
-			-- Fill up sounddata with samplepoint values.
-			for j = 0, structure.instruments[i].smpLen-1 do
-				if smpf == 2 then
-					-- Unsigned
-					local x = util.bin2num(buffer:sub(j,j))
-					--print((x-128)/256)
-					structure.instruments[i].data:setSample(j, (x-128)/256) -- normalize to [-1,1]
-				elseif smpf == 1 then
-					-- Signed -> convert to unsigned (x>127&-(256-x)|x)
-					local x = util.bin2num(buffer:sub(j,j))
-					x = x > 127 and -(256-x) or x
-					structure.instruments[i].data:setSample(j, (x/128)) -- normalize to [-1,1]
-				end
+		file:seek(paraptrPat[pat])
+		log("Pattern 0x%04X at 0x%06X ", pat, paraptrPat[pat])
+		v, n = file:read(2); if n ~= 2 then return false, errorString[14] end
+		local packedSize = util.bin2num(v, 'LE')
+		log("Packed Size: %04X bytes\n", packedSize)
+		packedSize = packedSize - 2 -- Don't count length short.
+		v, n = file:read(packedSize)
+		if n ~= packedSize then return false, errorString[14] end
+		local packedData = v
+		local ptr = 1
+		local row = 0
+		for row = 0, 63 do
+			pattern[row] = {}
+			for ch = 0, structure.channelCount-1 do
+				pattern[row][structure.channel[ch].map] = {}
 			end
 		end
+		while ptr <= packedSize do
+			local byte = util.bin2num(packedData:sub(ptr,ptr))
+			if byte ~= 0 then
+				local ch = byte % 0x20
+				byte = math.floor(byte / 0x20)
+				local cell = {}
+				local ni = byte % 0x2
+				byte = math.floor(byte / 0x2)
+				if ni == 1 then
+					if ch <= structure.channelCount-1 then
+						cell.note = util.bin2num(packedData:sub(ptr+1,ptr+1))
+						cell.instrument = 
+							util.bin2num(packedData:sub(ptr+2,ptr+2))
+					end
+					ptr = ptr + 2
+				end
+				local vl = byte % 0x2
+				byte = math.floor(byte / 0x2)
+				if vl == 1 then
+					if ch <= structure.channelCount-1 then
+						cell.volume = util.bin2num(packedData:sub(ptr+1,ptr+1))
+					end
+					ptr = ptr + 1
+				end
+				local fx = byte
+				if fx == 1 then
+					if ch <= structure.channelCount-1 then
+						cell.effectCommand =
+							util.bin2num(packedData:sub(ptr+1,ptr+1))
+						cell.effectData =
+							util.bin2num(packedData:sub(ptr+2,ptr+2))
+					end
+					ptr = ptr + 2
+				end
+				pattern[row][structure.channel[ch].map] = cell
+				ptr = ptr + 1
+			else
+				row = row + 1
+				ptr = ptr + 1
+			end
+		end
+		for row = 0, 63 do
+			log("    |")
+			for ch = 0, structure.channelCount-1 do
+				local cell = pattern[row][structure.channel[ch].map]
+				log("%3s %2s v%2s %1s%2s|",
+					cell.note and
+						noteTf(cell.note) or '...',
+					cell.instrument and
+						("%02X"):format(cell.instrument) or '..',
+					cell.volume and
+						("%02X"):format(cell.volume) or '..',
+					cell.effectCommand and
+						string.char(string.byte('A') + cell.effectCommand - 1)
+						or '.',
+					cell.effectData and
+						("%02X"):format(cell.effectData) or '..')
+			end
+			log("\n")
+		end
+		structure.pattern[pat] = pattern
+	end
+	log("\n")
 
-		--[[
-		local temp = love.audio.newSource(structure.instruments[i].data)
-		print(structure.instruments[i].smpLen, 8363 / structure.instruments[i].c4speed)
-		temp:setPitch(8363 / structure.instruments[i].c4speed)
-		temp:play()
-		while temp:isPlaying() do end
-		--]]
+	--[[Sample Waveform Data]]--
+
+	for wfm = 0, structure.sampleCount-1 do
+		if structure.sample[wfm].type == 1 then
+			file:seek(structure.sample[wfm].wfOffset)
+			log("Sample 0x%04X waveform at 0x%06X: ",
+				wfm, structure.sample[wfm].wfOffset)
+			if structure.sample[wfm].length > 0 then
+				structure.sample[wfm].data = love.sound.newSoundData(
+					structure.sample[wfm].length,
+					8000, -- Doesn't matter.
+					structure.sample[wfm].bitDepth,
+					structure.sample[wfm].channelCount)
+				-- TODO: test if 16bit/stereo lengths are premultiplied or not.
+				v, n = file:read(structure.sample[wfm].length);
+				if n ~= structure.sample[wfm].length then
+					return false, errorString[15]
+				end
+				for smp = 0, structure.sample[wfm].length-1 do
+					if sampleFormat == 'Signed' then
+						local x = util.bin2num(v:sub(smp,smp))
+						x = x > 127 and -(256-x) or x
+						structure.sample[wfm].data:setample(smp, (x/128))
+					elseif sampleFormat == 'Unsigned' then
+						local x = util.bin2num(v:sub(smp,smp))
+						structure.sample[wfm].data:setample(smp, (x-128)/256)
+					end
+				end
+				log("Loaded.\n")
+			end
+		end
 	end
 
-	log("Samples loaded!")
+	--[[Finalization]]--
 
-	log('')
-
-	---------------------------------------------------------------------------
-	-- Finalization
-	---------------------------------------------------------------------------
-
-	-- Only one type possible, so no heuristics needed; do append the version though.
-	structure.moduleType = 'Scream Tracker 3 (v' .. structure.version .. ')'
-
-	-- Expose row printing function
-	structure.printRow = printp_s3m
-
-	-- We're done! no lie! \o/                          ...yes lie, no AdLib OPL2 support for now.
+	structure.moduleType = ("Scream Tracker 3 v%s"):format(
+		structure.version)
+	log("-- /Scream Tracker 3 S3M loader/ --\n\n")
 	return structure
 end
 
