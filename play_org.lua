@@ -122,7 +122,7 @@ Voice.setPanning = function(v, pan)
 	end
 end
 
-Voice.process = function(v)
+Voice.render = function(v)
 	-- When not to do anything.
 	if v.disabled then return 0.0, 0.0 end
 	if v.frequency == 0 or v.octave == 0 then return 0.0, 0.0 end
@@ -395,7 +395,7 @@ routine.render = function(dt)
 
 			-- Render each voice, and mix them together.
 			if not voice[v].muted then
-				L, R = voice[v]:process()
+				L, R = voice[v]:render()
 				smpL, smpR = smpL + L, smpR + R
 			end
 
