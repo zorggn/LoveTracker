@@ -280,7 +280,7 @@ local routine = {}
 routine.load = function(mod)
 	module = mod
 
-	tickPeriod = module.tickRate / 1000.0 -- seconds
+	tickPeriod     = module.tickRate / 1000.0 -- seconds
 	samplingPeriod = 1.0 / device.samplingRate
 
 	-- Create and initialize voices.
