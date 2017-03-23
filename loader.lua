@@ -1,7 +1,7 @@
 -- Module loader
 -- by zorg @ 2016-2017 § ISC
 
-local log = function(str,...) print(string.format(str,...)) end
+local log = require('log')
 
 -- List of the supported file extensions and assigned loaders.
 -- Note that some module formats may share extensions, but those are dealt with in the loaders.

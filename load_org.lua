@@ -16,11 +16,13 @@
 		loopEnd            - 0x0..0xFFFFFFFF tick
 		tempo              - calculated, BPM
 		eventSum           - events
+
 		track[]            - 0..15
 			finetune       - 100..1900
 			instrument     - 0..99 (melodic) or 0..11 (percussive)
 			pizzicato      - 0,1
 			eventCount     - 0..4096 events
+
 		event[]            - 0..15
 			firstLoopEvent - calculated, tick
 			[]             - eventCount (per-track, see above)
@@ -32,7 +34,7 @@
 --]]
 
 local util = require('util')
-local log = function(str,...) --[[io.write(string.format(str,...))--]] end
+local log = require('log')
 
 local definedTimeSignatures = {
 	['4/4'] = true, ['3/4'] = true, ['4/3'] = true, ['3/3'] = true,
