@@ -24,6 +24,8 @@ No versions, use the commit history to keep track. :V
 - Code better interface
 - Allow editing and saving (since this would be a tracker, not just a player...)
 
+- <del>Smooth scrolling</del> Done.
+
 - <del>Understand and fix period/frequency calculation things (compared to OpenMPT, this is horribly "off-key").</del> Effects now work with the instrument-c4speed-adjusted period values, but the period table is still probably off, since the overall pitch is still lower than OpenMPT, and probably ST3 as well.
 - <del>Related to the above, fix E/F/G effects.</del> Done.
 - <del>Actually parse the s3m flags field.</del> Done.
