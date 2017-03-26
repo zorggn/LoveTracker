@@ -501,11 +501,11 @@ routine.load = function(mod)
 		loopCnt[ch] = 0 
 	end
 	patternLoop = false
-	filterSet = false
+	filterSet   = false
 
-	interpolation = 'nearest'
+	interpolation   = 'nearest'
 	smoothScrolling = true
-	visualizer = {}
+	visualizer      = {}
 
 	positionJump, patternBreak, patternDelay = false, false, 0
 	glissando, globalVolume = false, module.globalVolume
