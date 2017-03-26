@@ -87,20 +87,25 @@ end
 local Voice = {}
 
 Voice.getStatistics = function(v)
-	-- TODO: Used for matrix display
-	--[[
-A A A A B B C D -- notePeriod n noteDelayTicks noteCutTicks
-E E F F G G H H -- i v c d
-I I I I J J J J -- glisPeriod instPeriod
-K K L L M M 0 0 -- fxSlotGeneric fxSlotPortamento fxSlotVibrato
-O P Q Q N N R 0 -- tremorOnTicks tremorOffTicks tremorIndex arpOffsets arpIndex
-V V W W X X X X -- currVolume currPanning currOffset
-Y Y Y Y Z Z Z Z -- sample.c4speed sample.length
-@ @ @ @ & & & & -- sample.loopStart sample.loopEnd
-	--]]
-	return v.notePeriod, v.n, v.noteDelayTicks, v.noteCutTicks,
-		v.i, v.v, v.c, v.d,
-		v.glisPeriod, v.instPeriod, math.floor(v.currOffset)
+	local smpL, smpS, smpE, Cspd, T, L, H, S = 0, 0, 0, 0, 0, 0, 0, 0
+	if v.instrument then
+		smpL = v.instrument.length or 0
+		smpS = v.instrument.loopStart or 0
+		smpE = v.instrument.loopEnd or 0
+		Cspd = v.instrument.c4speed or 0
+		T    = v.instrument.type
+		L    = v.instrument.looped and 0 or 1
+		H    = v.instrument.bitDepth == 16 and 1 or 0
+		S    = v.instrument.channelCount == 2 and 1 or 0
+	end
+	return v.n or 0, v.i or 0, v.v or 0, v.c or 0, v.d or 0,
+		v.notePeriod, v.glisPeriod, v.instPeriod,
+		v.currOffset, smpL, smpS, smpE, Cspd, T, L, H, S,
+		v.currVolume*0x40, v.currPanning*0xF, v.fxCommand,
+		v.fxSlotGeneric, v.fxSlotPortamento, v.fxSlotVibrato,
+		v.noteDelayTicks, v.noteCutTicks,
+		v.arpIndex, v.arpOffset1, v.arpOffset2,
+		v.tremorIndex, v.tremorOnTicks, v.tremorOffTicks
 end
 
 Voice.setNote = function(v, note)
@@ -969,23 +974,16 @@ routine.draw = function()
 	love.graphics.push()
 	love.graphics.translate(74*8, 0)
 	love.graphics.setColor(0,0,0.25)
-	love.graphics.rectangle('fill',0,0,73*8,(module.channelCount+1)*12)
+	love.graphics.rectangle('fill',0,0,104*8,(module.channelCount+1)*12)
 	love.graphics.setColor(1,1,1)
 	love.graphics.translate(0,-2)
 	love.graphics.print(
-		'Ch nPer Nx d c | Ix Vx Cx Dx | gPer iPer | smpO',
-		 0, 0)
---love.graphics.print(
---	"Ch | Nx Ix Vx Cx Dx | nPer gPer iPer | cOfs smpL smpS smpE Cspd | cV cP | FX Fg Fp Fv | DC T+- A12",
---	0, 0)
+		"Ch | Nx Ix Vx Cx Dx | nPer gPer iPer cOfs smpL smpS smpE Cspd T L H S | cV cP | FX Fg Fp Fv | DC A12 T+-",
+		0, 0)
 	for ch = 0, module.channelCount-1 do
-		-- A A A A B B C D -- notePeriod n noteDelayTicks noteCutTicks
-		-- E E F F G G H H -- i v c d
-		-- I I I I J J J J -- glisPeriod instPeriod
-		local stats = {voice[ch]:getStatistics()}
 		love.graphics.print((
-			"%02X %04X %02X %1X %1X | %02X %02X %02X %02X | %04X %04X | %04X"
-			):format(ch, unpack(stats)), 0, (ch+1)*12)
+			"%02X | %02X %02X %02X %02X %02X | %04X %04X %04X %04X %04X %04X %04X %04X %1X %1X %1X %1X | %02X %02X | %02X %02X %02X %02X | %02X %1X%1X%1X %1X%1X%1X"
+			):format(ch, voice[ch]:getStatistics()), 0, (ch+1)*12)
 	end
 	love.graphics.pop()
 end
