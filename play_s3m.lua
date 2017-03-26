@@ -938,22 +938,32 @@ routine.draw = function()
 	-- Visualizer
 	love.graphics.push()
 	love.graphics.setLineStyle('rough')
+	love.graphics.setLineWidth(1)
 	love.graphics.translate(3*8,384)
+
 	for ch = 0, module.channelCount-1 do
 		love.graphics.setColor(.4,.4,.4)
 		love.graphics.setBlendMode('multiply','premultiplied')
 		love.graphics.rectangle('fill',0,-128,104,128)
-		love.graphics.setBlendMode('alpha')
-		love.graphics.setColor(.4,.4,.3)
+		love.graphics.setBlendMode('alpha','alphamultiply')
+		love.graphics.setColor(.3,.3,.25)
+		-- For some reason, aggregating these into one lg.line call kills
+		-- efficiency horribly.
 		for smp = 0, visualizer[ch].length-2 do
 			love.graphics.line(
-				smp,   math.floor(visualizer[ch][smp  ]*256)-64,
-				smp+1, math.floor(visualizer[ch][smp+1]*256)-64)
+				smp  , math.floor(visualizer[ch][smp  ]*254)-64,
+				smp+1, math.floor(visualizer[ch][smp+1]*254)-64)
 		end
-		love.graphics.setColor(1,1,1)
+		
+		love.graphics.setColor(.9,.9,1)
+		local points = {}
+		-- This one works better like this, though.
 		for smp = 0, visualizer[ch].length-1 do
-			love.graphics.points(smp, math.floor(visualizer[ch][smp]*256)-64)
+			points[#points+1] = smp
+			points[#points+1] = math.floor(visualizer[ch][smp]*254)-64
 		end
+		love.graphics.points(points)
+
 		love.graphics.translate(104+8,0)
 	end
 	love.graphics.pop()
