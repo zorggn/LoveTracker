@@ -68,7 +68,7 @@ local OCTAVE4PERIOD = {
 
 local NOTEPERIOD = {}
 for octave = 0, 10 do for note = 1, 12 do
-		NOTEPERIOD[octave*12+note] =
+		NOTEPERIOD[octave*12+(note-1)] =
 			(16 * (OCTAVE4PERIOD[note] / 2^octave))
 end end
 
