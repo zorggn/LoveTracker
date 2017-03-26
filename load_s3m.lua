@@ -428,7 +428,7 @@ local load_s3m = function(file)
 			v, n = file:read(1)
 			if n ~= 1 then return false, errorString[9] end
 			v = util.bin2flags(v)
-			sample.looped       = v[1] == 1
+			sample.looped       = v[1]
 			sample.channelCount = v[2] and  2 or 1
 			sample.bitDepth     = v[3] and 16 or 8
 			log("    Flag   1 - Looped: %1s \n", (v[1]==true and 'Y' or 'N'))
