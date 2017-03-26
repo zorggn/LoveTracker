@@ -817,7 +817,7 @@ local noteTf = function(n)
 		return '...'
 	else
 		local class = n % 0x10
-		local oct = math.floor(n / 0x10) - 1
+		local oct = math.floor(n / 0x10) + 1
 		return ("%1s%1s%1X"):format(letter[class], symbol[class], oct)
 	end
 end
