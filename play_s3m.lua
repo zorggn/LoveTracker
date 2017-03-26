@@ -103,6 +103,7 @@ Voice.getStatistics = function(v)
 		v.currOffset, smpL, smpS, smpE, Cspd, T, L, H, S,
 		v.currInstrument, v.currVolume*0x40, v.currPanning*0xF, v.fxCommand,
 		v.fxSlotGeneric, v.fxSlotPortamento, v.fxSlotVibrato,
+		loopRow[v.ch], loopCnt[v.ch],
 		v.noteDelayTicks, v.noteCutTicks,
 		v.arpIndex, v.arpOffset1, v.arpOffset2,
 		v.tremorIndex, v.tremorOnTicks, v.tremorOffTicks
@@ -432,8 +433,10 @@ end
 
 local mtVoice = {__index = Voice}
 
-Voice.new = function(pan)
+Voice.new = function(ch, pan)
 	local v = setmetatable({}, mtVoice)
+
+	v.ch = ch
 
 	-- Processing related.
 	v.disabled = false -- Whether or not the voice is processed.
@@ -523,7 +526,9 @@ routine.load = function(mod)
 	voice = {}
 	for ch=0, 31 do --module.channelCount-1 do
 		if module.channel[ch].map then
-			voice[module.channel[ch].map] = Voice.new(module.channel[ch].pan)
+			voice[module.channel[ch].map] = Voice.new(
+				module.channel[ch].map,
+				module.channel[ch].pan)
 			-- Per-voice waveform analyzers.
 			visualizer[module.channel[ch].map] = {}
 			visualizer[module.channel[ch].map].offset = 0
@@ -1027,11 +1032,11 @@ routine.draw = function()
 	love.graphics.setColor(1,1,1)
 	love.graphics.translate(0,-2)
 	love.graphics.print(
-		"Ch | Nx Ix Vx Cx Dx | nPer gPer iPer cOfs smpL smpS smpE Cspd T L H S | cI cV cP | FX Fg Fp Fv | DC A12 T+-",
+		"Ch | Nx Ix Vx Cx Dx | nPer gPer iPer cOfs smpL smpS smpE Cspd T L H S | cI cV cP | FX Fg Fp Fv | Loop | DC A12 T+-",
 		0, 0)
 	for ch = 0, module.channelCount-1 do
 		love.graphics.print((
-			"%02X | %02X %02X %02X %02X %02X | %04X %04X %04X %04X %04X %04X %04X %04X %1X %1X %1X %1X | %02X %02X %02X | %02X %02X %02X %02X | %02X %1X%1X%1X %1X%1X%1X"
+			"%02X | %02X %02X %02X %02X %02X | %04X %04X %04X %04X %04X %04X %04X %04X %1X %1X %1X %1X | %02X %02X %02X | %02X %02X %02X %02X | %02X %1X | %02X %1X%1X%1X %1X%1X%1X"
 			):format(ch, voice[ch]:getStatistics()), 0, (ch+1)*12)
 	end
 	love.graphics.pop()
