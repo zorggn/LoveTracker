@@ -101,7 +101,7 @@ Voice.getStatistics = function(v)
 	return v.n or 0, v.i or 0, v.v or 0, v.c or 0, v.d or 0,
 		v.notePeriod, v.glisPeriod, v.instPeriod,
 		v.currOffset, smpL, smpS, smpE, Cspd, T, L, H, S,
-		v.currVolume*0x40, v.currPanning*0xF, v.fxCommand,
+		v.currInstrument, v.currVolume*0x40, v.currPanning*0xF, v.fxCommand,
 		v.fxSlotGeneric, v.fxSlotPortamento, v.fxSlotVibrato,
 		v.noteDelayTicks, v.noteCutTicks,
 		v.arpIndex, v.arpOffset1, v.arpOffset2,
@@ -164,9 +164,11 @@ Voice.process = function(v, currentTick)
 	if v.i then
 		if     v.i == 0 then
 			-- Instrument undefined
+			v.currInstrument = 0
 			I = false
 		elseif v.i >  0 then
 			-- Instrument defined
+			v.currInstrument = v.i
 			I = v.i - 1
 		end
 	else
@@ -452,6 +454,8 @@ Voice.new = function(pan)
 
 	v.currVolume       = 0.0    -- Current volume.
 	v.currPanning      = pan/0xF-- Current panning.
+
+	v.currInstrument   = 0x00   -- Only for display purposes.
 
 	-- Emulate ST3 limited effect memory.
 	v.fxCommand        = 0x00   -- Effect command.
@@ -974,15 +978,15 @@ routine.draw = function()
 	love.graphics.push()
 	love.graphics.translate(74*8, 0)
 	love.graphics.setColor(0,0,0.25)
-	love.graphics.rectangle('fill',0,0,104*8,(module.channelCount+1)*12)
+	love.graphics.rectangle('fill',0,0,107*8,(module.channelCount+1)*12)
 	love.graphics.setColor(1,1,1)
 	love.graphics.translate(0,-2)
 	love.graphics.print(
-		"Ch | Nx Ix Vx Cx Dx | nPer gPer iPer cOfs smpL smpS smpE Cspd T L H S | cV cP | FX Fg Fp Fv | DC A12 T+-",
+		"Ch | Nx Ix Vx Cx Dx | nPer gPer iPer cOfs smpL smpS smpE Cspd T L H S | cI cV cP | FX Fg Fp Fv | DC A12 T+-",
 		0, 0)
 	for ch = 0, module.channelCount-1 do
 		love.graphics.print((
-			"%02X | %02X %02X %02X %02X %02X | %04X %04X %04X %04X %04X %04X %04X %04X %1X %1X %1X %1X | %02X %02X | %02X %02X %02X %02X | %02X %1X%1X%1X %1X%1X%1X"
+			"%02X | %02X %02X %02X %02X %02X | %04X %04X %04X %04X %04X %04X %04X %04X %1X %1X %1X %1X | %02X %02X %02X | %02X %02X %02X %02X | %02X %1X%1X%1X %1X%1X%1X"
 			):format(ch, voice[ch]:getStatistics()), 0, (ch+1)*12)
 	end
 	love.graphics.pop()
