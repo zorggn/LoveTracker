@@ -386,6 +386,8 @@ local load_s3m = function(file)
 			v, n = file:read(2)
 			if n ~= 2 then return false, errorString[9] end
 			sample.wfOffset = sample.wfOffset + util.bin2num(v, 'LE')
+			-- Needs a multiplication by 0x10 to be correct.
+			sample.wfOffset = sample.wfOffset * 0x10 
 			log("    Waveform Offset 0x%06X\n", sample.wfOffset)
 			v, n = file:read(4) -- Format only uses first two bytes though.
 			if n ~= 4 then return false, errorString[9] end
