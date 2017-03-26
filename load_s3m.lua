@@ -730,19 +730,22 @@ local load_s3m = function(file)
 					8000, -- Doesn't matter.
 					structure.sample[wfm].bitDepth,
 					structure.sample[wfm].channelCount)
-				-- TODO: test if 16bit/stereo lengths are premultiplied or not.
-				v, n = file:read(structure.sample[wfm].length);
-				if n ~= structure.sample[wfm].length then
+				local z = structure.sample[wfm].bitDepth / 8
+				v, n = file:read(structure.sample[wfm].length * z);
+				if n ~= structure.sample[wfm].length * z then
 					return false, errorString[15]
 				end
 				for smp = 0, structure.sample[wfm].length-1 do
-					if sampleFormat == 'Signed' then
-						local x = util.bin2num(v:sub(smp,smp))
-						x = x > 127 and -(256-x) or x
-						structure.sample[wfm].data:setample(smp, (x/128))
-					elseif sampleFormat == 'Unsigned' then
-						local x = util.bin2num(v:sub(smp,smp))
-						structure.sample[wfm].data:setample(smp, (x-128)/256)
+					local ofs = smp * z
+					if structure.sampleFormat == 'Signed' then
+						local x = util.bin2num(v:sub(ofs+1, ofs+1+(z-1)), 'LE')
+						x = x >= ((2^(8*z))/2) and -((2^(8*z))-x) or x
+						structure.sample[wfm].data:setSample(smp, (x/128))
+					elseif structure.sampleFormat == 'Unsigned' then
+						local x = util.bin2num(v:sub(ofs+1, ofs+1+(z-1)), 'LE')
+						structure.sample[wfm].data:setSample(smp,
+							(x-((2^(8*z))/2))/(2^(8*z))
+						)
 					end
 				end
 				log("Loaded.\n")
