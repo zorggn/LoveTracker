@@ -104,19 +104,19 @@ Y Y Y Y Z Z Z Z -- sample.c4speed sample.length
 end
 
 Voice.setNote = function(v, note)
-	v.n_ = note
+	v.n = note
 end
 
 Voice.setInstrument = function(v, instrument)
-	v.i_ = instrument
+	v.i = instrument
 end
 
 Voice.setVolume = function(v, volume)
-	v.v_ = volume
+	v.v = volume
 end
 
 Voice.setEffect = function(v, effectCommand, effectData)
-	v.c_, v.d_ = effectCommand, effectData
+	v.c, v.d = effectCommand, effectData
 end
 
 Voice.setPeriod = function(v, pitch)
@@ -134,52 +134,64 @@ Voice.setPeriod = function(v, pitch)
 end
 
 Voice.process = function(v, currentTick)
-	local N, I, V, C, D = false, false, false, false, false
+	local N, I, V, C, D
 	local Dx, Dy
 
 	-- Handle inputs
-	if v.n_ then
-		if v.n_ == 255 then
+	if v.n then
+		if     v.n == 255 then
 			-- Note continue
 			N = false
-		elseif v.n_ == 254 then
+		elseif v.n == 254 then
 			-- Note cut
 			v.notePeriod = 0
 			N = -1
-		elseif v.n_ < 254 then
+		elseif v.n <  254 then
 			-- Note trigger
-			N = math.floor(v.n_ / 0x10) * 12 + (v.n_ % 0x10)
+			N = math.floor(v.n / 0x10) * 12 + (v.n % 0x10)
 		end
-		v.n = v.n_
+	else
+		-- No note
+		v.n = 0
+		N   = false
 	end
 
-	if v.i_ then
-		if v.i_ == 0 then
+	if v.i then
+		if     v.i == 0 then
 			-- Instrument undefined
 			I = false
-		elseif v.i_ > 0 then
+		elseif v.i >  0 then
 			-- Instrument defined
-			I = v.i_ - 1
+			I = v.i - 1
 		end
-		v.i = v.i_
-	end
-
-	if v.v_ then
-		V = v.v_
-		v.v = v.v_
-	end
-
-	if v.c_ then
-		v.currEffect = C
-		v.c, v.d = v.c_, v.d_
 	else
-		v.currEffect = false
-		v.c, v.d = 0, 0
+		-- No instrument
+		v.i = 0
+		I   = false
 	end
-	C = string.char(v.c + 0x40)
-	D = v.d
+
+	if v.v then
+		V = v.v
+	else
+		-- No volume
+		v.v = 0
+		V   = false
+	end
+
+	if v.c then
+		v.fxCommand = v.c
+		v.fxData    = v.d
+	else
+		-- No effect
+		v.c = 0
+		v.d = 0
+	end
+	C  = string.char(v.c + 0x40)
+	D  = v.d
 	Dx = math.floor(D / 16)
 	Dy =            D % 16
+
+	
 
 	if currentTick == 0 then
 		-- Combinatorics...
@@ -302,7 +314,7 @@ Voice.process = function(v, currentTick)
 		elseif C == 'O' then
 			-- Set Offset
 			v.fxSlotGeneric = D
-			v.fxSetOffset   = D * 0x100
+			v.setOffset     = D * 0x100
 		end
 	else 
 		-- Tn Effects.
@@ -349,19 +361,19 @@ Voice.process = function(v, currentTick)
 end
 
 Voice.render = function(v)
-	if v.instPeriod == 0 then return 0.0, 0.0 end
-	if not v.instrument or v.instrument.type == 0 then return 0.0, 0.0 end
-
 	local smpL, smpR = 0.0, 0.0
+
+	if v.instPeriod == 0 then return smpL, smpR end
+	if not v.instrument or v.instrument.type == 0 then return smpL, smpR end
 
 	if v.instrument.type == 1 then
 		-- Sampler.
 		v.currOffset = v.currOffset + (FIXEDCLOCK / v.instPeriod)
 
-		if v.fxSetOffset > 0 then
+		if v.setOffset > 0 then
 			-- Add setOffset parameter.
-			v.currOffset = v.currOffset + v.fxSetOffset
-			v.fxSetOffset = 0
+			v.currOffset = v.currOffset + v.setOffset
+			v.setOffset = 0
 		end
 
 		if v.instrument.looped then
@@ -375,7 +387,7 @@ Voice.render = function(v)
 			then
 				v.currOffset = 0.0
 				v.instPeriod = 0 -- Only play the sample once.
-				return 0.0, 0.0
+				return smpL, smpR
 			end
 		end
 
@@ -396,8 +408,9 @@ Voice.render = function(v)
 				smpL = v.instrument.data:getSample(p)
 				smpR = v.instrument.data:getSample(p + 1)
 			end
-		else
-			-- TODO: Other methods.
+		elseif v.instrument.type == 2 then
+			-- TODO: AdLib OPL2 synth.
+
 		end
 
 		smpL = smpL * v.currVolume * (1.0 - v.currPanning)
@@ -406,6 +419,7 @@ Voice.render = function(v)
 
 	elseif v.instrument.type == 2 then
 		-- TODO: AdLib melodics.
+		return smpL, smpR
 	end
 end
 
@@ -418,35 +432,43 @@ Voice.new = function(pan)
 	v.disabled = false -- Whether or not the voice is processed.
 	v.muted    = false -- Whether or not the voice output is muted.
 
-	-- Per-event inputs.
-	v.n,  v.i,  v.v,  v.c,  v.d  = 0x00, 0x00, 0x00, 0x00, 0x00 -- Curr.
-	v.n_, v.i_, v.v_, v.c_, v.d_ = 0x00, 0x00, 0x00, 0x00, 0x00 -- Temp.
+	-- Per-row input data.
+	v.n,  v.i,  v.v,  v.c,  v.d  = 0x00, 0x00, 0x00, 0x00, 0x00
 
-	-- Calculated values.
+	-- Reference to the instrument
 	v.instrument       = false  -- Reference to the current instrument.
+
+	-- Current running values
 	v.notePeriod       = 0x0000 -- Base period value as taken from note data.
-	v.instPeriod       = 0x0000 -- True period value calc.-ed w/ the current instrument.
 	v.glisPeriod       = 0x0000 -- Final (true) period value of Gxx glissando effects.
+	v.instPeriod       = 0x0000 -- True period value calc.-ed w/ the current instrument.
+
 	v.currOffset       = 0.0    -- Current sample offset. (floored -> matrix displayable)
-	v.arpIndex         = 0x0    -- Running index for arpeggio effect.
-	v.arpOffset1       = 0x0    -- Arpeggio offsets.
-	v.arpOffset2       = 0x0    -- -"-
-	v.tremorIndex      = 0x00   -- Running index for tremor effect.
-	v.tremorOnTicks    = 0x0    -- Ticks while sound is unmuted.
-	v.tremorOffTicks   = 0x0    -- Ticks while sound is muted.
+
 	v.currVolume       = 0.0    -- Current volume.
 	v.currPanning      = pan/0xF-- Current panning.
+
+	-- Emulate ST3 limited effect memory.
+	v.fxCommand        = 0x00   -- Effect command.
+	v.fxData           = 0x00   -- Effect parameter.
+
+	v.fxSlotGeneric    = 0x00   -- Generic effect parameter slot.
+	v.fxSlotPortamento = 0x00   -- Portamento effect parameter slot. (E/F/G)
+	v.fxSlotVibrato    = 0x00   -- Vibrato effect parameter slot. (H)
+
+	-- Faster calculation
 	v.noteDelayTicks   = 0x0    -- Ticks to delay note onsets.
 	v.noteCutTicks     = 0x0    -- Ticks to cut note sound after.
 
-	-- Emulate ST3 limited effect memory.
-	v.currEffect       = false  -- Current effect in effect.
-	v.fxSlotGeneric    = 0x00   -- Generic effect parameter slot.
-	v.fxSlotPortamento = 0x00   -- Portamento effect parameter slot.
-	v.fxSlotVibrato    = 0x00   -- Vibrato effect parameter slot.
+	v.arpIndex         = 0x0    -- Running index for arpeggio effect.
+	v.arpOffset1       = 0x0    -- Arpeggio offsets.
+	v.arpOffset2       = 0x0    -- -"-.
 
-	-- These are so that we don't recalculate everything in :render().
-	v.fxSetOffset      = 0     -- Oxx setOffset
+	v.tremorIndex      = 0x00   -- Running index for tremor effect.
+	v.tremorOnTicks    = 0x0    -- Ticks while sound is unmuted.
+	v.tremorOffTicks   = 0x0    -- Ticks while sound is muted.
+
+	v.setOffset        = 0x0000 -- Oxx setOffset calculated value.
 
 
 	return v
