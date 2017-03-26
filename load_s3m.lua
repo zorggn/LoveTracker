@@ -378,7 +378,11 @@ local load_s3m = function(file)
 			file:seek(paraptrSmp[smp] + 0x4C)
 			v, n = file:read(4)
 			if n ~= 4 then return false, errorString[9] end
-			if v ~= 'SCRS' then return false, errorString[10] end
+			if v ~= 'SCRS' then
+				--return false, errorString[10]
+				-- Some modules might not correctly include this...
+				log("    Warning: Subheader wasn't 'SCRS'; was '%s'!\n", v)
+			end
 			file:seek(paraptrSmp[smp] + 13)
 			v, n = file:read(1)
 			if n ~= 1 then return false, errorString[9] end
@@ -462,15 +466,19 @@ local load_s3m = function(file)
 			log("    Sample name '%s' (%s)\n", sample.name,
 			util.str2hex(sample.name, ' '))
 			-- Verification
-			v, n = file:read(4);
-			if n ~= 4 then return false, errorString[9] end
-			if v ~= 'SCRS' then return false, errorString[11] end
+			-- v, n = file:read(4);
+			-- if n ~= 4 then return false, errorString[9] end
+			-- if v ~= 'SCRS' then return false, errorString[11] end
 		elseif sample.type == 2 then
 			-- AdLib
 			file:seek(paraptrSmp[smp] + 0x4C)
 			v, n = file:read(4)
 			if n ~= 4 then return false, errorString[9] end
-			if v ~= 'SCRI' then return false, errorString[12] end
+			if v ~= 'SCRI' then
+				-- return false, errorString[12]
+				-- Some modules might not correctly include this...
+				log("    Warning: Subheader wasn't 'SCRI'; was '%s'!\n", v)
+			end
 			file:seek(paraptrSmp[smp] + 13)
 			v, n = file:read(3)
 			if n ~= 3 then return false, errorString[9] end
@@ -592,9 +600,9 @@ local load_s3m = function(file)
 			log("    Sample name '%s' (%s)\n", sample.name,
 			util.str2hex(sample.name, ' '))
 			-- Verification
-			v, n = file:read(4);
-			if n ~= 4 then return false, errorString[9] end
-			if v ~= 'SCRI' then return false, errorString[13] end
+			-- v, n = file:read(4);
+			-- if n ~= 4 then return false, errorString[9] end
+			-- if v ~= 'SCRI' then return false, errorString[13] end
 		end
 		log("\n")
 		structure.sample[smp] = sample
