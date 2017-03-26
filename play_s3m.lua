@@ -1,80 +1,45 @@
--- Basic s3m playroutine skellington
+-- Scream Tracker 3 "S3M" playroutine
 -- by zorg @ 2017 § ISC
 
--- See doc/s3m.txt for references.
 
--------------------------------
+-- Note: To keep things compact, everything not generic enough to be used by
+--       other playroutines are kept inside the respective play_*.lua files,
+--       a.k.a. these ones.
 
--- Audio Parameters
--- References: N/A
+local Device = require 'device'
+local device = Device(44100, 16, 2, 1024, 'Buffer', 'Buffer')
 
-local samplingRate   = 44100                 -- Hz (1/seconds)
-local bitDepth       =    16                 -- bits
-local channelCount   =     2                 -- channels
--------------------------------
+-- Start defining everything as local, then if we need something to be passed
+-- into something that's a bit more "closed", redefine it as a var. of routine.
 
--- Sound Buffer
--- References: Audio Parameters
+local source = device.source
+local buffer = device.buffer
 
-local bufferOffset   =    0                  -- samplepoints
-local bufferSize     = 2048                  -- samplepoints
-local buffer         = love.sound.newSoundData(
-					bufferSize,
-					samplingRate, 
-					bitDepth, 
-					channelCount
-					)                        -- SoundData
--------------------------------
+local module, voice
 
--- Queuable Source
--- References: Audio Parameters
+local tickPeriod, samplingPeriod, midiPPQ, actualTempo
+local timeSigNumer, timeSigDenom
 
-local qSource      = love.audio.newQueueableSource(samplingRate, bitDepth, channelCount)
--------------------------------
+--
+local normalizer, normRatio, samplesToMix
+local interpolation
 
--- Module
--- References: N/A (External)
+local tickAccumulator, currentTick, currentRow, currentOrder, currentPattern
+local time
+local smoothScrolling
 
-local module
--------------------------------
-
--- Runtime
--- References: Audio Parameters
-
-local globalVolume   = 1.0
-local interpolation = 'nearest'              -- globally set for all voices
-
-local currentOrder                           -- order index
-local currentPattern                         -- pattern index
-local currentRow                             -- row index
-local currentTick                            -- tick index
-
-local tempo                                  -- beats per minute (Factor, not actual BPM!)
-local speed                                  -- ticks per row (Divisor)
-local timeSigNumer   =   4                   -- rows per beat (For actual BPM calculation)
-local timeSigDenom   =   4                   -- row type (note lengths, for "midi")
-
-local midiPPQ                                -- pulse per quarternote
-local samplingPeriod = 1 / samplingRate      -- seconds (per smp)
-local tickPeriod                             -- seconds (per tick)
-local arpeggioPeriod = samplingRate / 50     -- seconds (per Jxy state change.)
-
-local actualBPM                              -- beats per minute (This one is the real deal.)
-
-local cpuTime        = 0.0                   -- seconds (based on love.timer)
-local bufferTime     = 0.0                   -- seconds (based on processed smp-s)
-
-local trackingMode   = 'cpu'              -- cpu or buffer based playback cursor positioning
-local tickAccum      = 0                     -- seconds
-local samplesMixed   = 0                     -- smp (samples mixed current frame)
-local samplesTotal   = 0                     -- smp (samples mixed total)
-
-local patBreak, posJump = false, false       -- If true, handle position update specially.
--------------------------------
+local speed, tempo
+local loopRow, loopCnt, patternLoop, filterSet
+local positionJump, patternBreak, patternDelay, glissando, globalVolume
+local vibratoWaveform, tremoloWaveform
 
 -- Constants
 
-C4speedFinetunes = {
+-- TODO: do dim. analysis on these numbers so we can reason about them better.
+
+local ARPEGGIOPERIOD = 1 / 50 -- Hz; ST3's arp isn't tied to the speed...
+
+local C4SPEEDFINETUNES = {
 	[ 0x00 ] = 7895, -- -8
 	[ 0x01 ] = 7941,
 	[ 0x02 ] = 7985,
@@ -93,760 +58,915 @@ C4speedFinetunes = {
 	[ 0x0F ] = 8757, -- +7
 }
 
-defaultC4speed = C4speedFinetunes[ 0x08 ]
+local DEFAULTC4SPEED = C4SPEEDFINETUNES[ 0x08 ]
 
-fourthOctavePeriod = {1712, 1616, 1524, 1440,1356,1280,1208,1140,1076,1016,960,907}
+-- Hz = DEFAULTC4SPEED * C4PERIOD / NOTEPERIOD
 
-baseClock  = defaultC4speed * fourthOctavePeriod[1]
-fixedClock = baseClock / samplingRate
+local OCTAVE4PERIOD = {
+	1712, 1616, 1524, 1440, 1356, 1280, 1208, 1140, 1076, 1016, 960, 907
+}
 
-notePeriod = {}
+local NOTEPERIOD = {}
+for octave = 0, 10 do for note = 1, 12 do
+		NOTEPERIOD[octave*12+note] =
+			(16 * (OCTAVE4PERIOD[note] / 2^octave))
+end end
 
-for octave = 0, 10 do
-	for note = 1, 12 do
-		notePeriod[octave*12+note] = (defaultC4speed * 16 * (fourthOctavePeriod[note] / 2^octave)) / C4speedFinetunes[8]
+local BASECLOCK  = DEFAULTC4SPEED * OCTAVE4PERIOD[1] -- C4
+local FIXEDCLOCK = BASECLOCK / device.samplingRate
+
+local FIXTIMING = function(tempo, speed, tsn, tsd)
+	local tick =  2.5 / tempo
+	local ppq  =  speed *  tsn * (4.0 / tsd)
+	local tempo = 60.0 / (tick * ppq)
+	return tick, ppq, tempo
+end
+
+-- Voice objects
+
+local Voice = {}
+
+Voice.getStatistics = function(v)
+	-- TODO: Used for matrix display
+	--[[
+A A A A B B C D -- notePeriod n noteDelayTicks noteCutTicks
+E E F F G G H H -- i v c d
+I I I I J J J J -- glisPeriod instPeriod
+K K L L M M 0 0 -- fxSlotGeneric fxSlotPortamento fxSlotVibrato
+O P Q Q N N R 0 -- tremorOnTicks tremorOffTicks tremorIndex arpOffsets arpIndex
+V V W W X X X X -- currVolume currPanning currOffset
+Y Y Y Y Z Z Z Z -- sample.c4speed sample.length
+@ @ @ @ & & & & -- sample.loopStart sample.loopEnd
+	--]]
+	return v.notePeriod, v.n, v.noteDelayTicks, v.noteCutTicks,
+		v.i, v.v, v.c, v.d,
+		v.glisPeriod, v.instPeriod, math.floor(v.currOffset)
+end
+
+Voice.setNote = function(v, note)
+	v.n_ = note
+end
+
+Voice.setInstrument = function(v, instrument)
+	v.i_ = instrument
+end
+
+Voice.setVolume = function(v, volume)
+	v.v_ = volume
+end
+
+Voice.setEffect = function(v, effectCommand, effectData)
+	v.c_, v.d_ = effectCommand, effectData
+end
+
+Voice.setPeriod = function(v, pitch)
+	-- Voice.process calls this; set raw note period, and the fixed value
+	-- modified by the instrument c4speed.
+	if pitch == -1 then
+		v.notePeriod = 0
+		v.instPeriod = 0
+		return
+	end
+	v.notePeriod = NOTEPERIOD[pitch]
+	if v.instrument then
+		v.instPeriod = v.notePeriod * (DEFAULTC4SPEED / v.instrument.c4speed)
 	end
 end
 
--- PT compatible (quarter) sine table.
--- The values exactly match with what ProTracker (and in this case, ScreamTracker 3) uses.
-local sineTable = {}
-for i=0,31 do
-	sineTable[i] = math.floor(math.sin(math.pi*i/32)*255)
-end
+Voice.process = function(v, currentTick)
+	local N, I, V, C, D = false, false, false, false, false
+	local Dx, Dy
 
--------------------------------
-
--- Voices
-
-local voice = {}
-
-voice.stats = function(v)
-	return v.notePeriod,
-	v.instrument,
-	v.sampleVolume,
-	v.panning,
-	v._currentOffset,
-	v.notePeriod * (defaultC4speed / (module.instruments[v.instrument].c4speed or 1.0))
-end
-
-voice.setNote = function(v, note)
-	v.notePeriod = notePeriod[note]
-end
-
-voice.setInstrument = function(v, instrument)
-	v.instrument = instrument
-end
-
-voice.setVolume = function(v, volume)
-	v.sampleVolume = volume
-end
-
-voice.setOffset = function(v, offset)
-	v.sampleOffset = offset
-end
-
-voice.process = function(v)
-	-- No note to play.
-	if v.notePeriod == 0 then return 0 end
-
-	-- No instrument to sound.
-	if not v.instrument or module.instruments[v.instrument].type == 0 then return 0 end
-
-
-	local normalizer = defaultC4speed / module.instruments[v.instrument].c4speed
-	local currPeriod = v.notePeriod * normalizer
-	v._currentOffset = v._currentOffset + (fixedClock / currPeriod)
-
-	if v.sampleOffset > 0 then
-		v._currentOffset = v._currentOffset + v.sampleOffset
-		v.sampleOffset = 0.0
-	end
-
-	if module.instruments[v.instrument].looping then
-		-- loop part between smpLoopStart and smpLoopEnd
-		local addend = v._currentOffset - module.instruments[v.instrument].smpLoopEnd
-		if addend >= 0 then
-			v._currentOffset = module.instruments[v.instrument].smpLoopStart + addend
-		end
-	else
-		if v._currentOffset > module.instruments[v.instrument].data:getSampleCount() then
-			v._currentOffset = 0.0
+	-- Handle inputs
+	if v.n_ then
+		if v.n_ == 255 then
+			-- Note continue
+			N = false
+		elseif v.n_ == 254 then
+			-- Note cut
 			v.notePeriod = 0
-			return 0
+			N = -1
+		elseif v.n_ < 254 then
+			-- Note trigger
+			N = math.floor(v.n_ / 0x10) * 12 + (v.n_ % 0x10)
+		end
+		v.n = v.n_
+	end
+
+	if v.i_ then
+		if v.i_ == 0 then
+			-- Instrument undefined
+			I = false
+		elseif v.i_ > 0 then
+			-- Instrument defined
+			I = v.i_ - 1
+		end
+		v.i = v.i_
+	end
+
+	if v.v_ then
+		V = v.v_
+		v.v = v.v_
+	end
+
+	if v.c_ then
+		v.currEffect = C
+		v.c, v.d = v.c_, v.d_
+	else
+		v.currEffect = false
+		v.c, v.d = 0, 0
+	end
+	C = string.char(v.c + 0x40)
+	D = v.d
+	Dx = math.floor(D / 16)
+	Dy =            D % 16
+
+	if currentTick == 0 then
+		-- Combinatorics...
+		if         N and     I then
+			-- Apply instrument
+			v.instrument = module.sample[I]
+			if C ~= 'G' then
+				-- Set note and reset offset to 0.
+				v:setPeriod(N)
+				v.currOffset = 0
+			end
+			-- Handle volume
+			if V then
+				v.currVolume = V / 0x40
+			else
+				if v.instrument then
+					v.currVolume = v.instrument.volume / 0x40
+				end
+			end
+		elseif     N and not I then
+			if C ~= 'G' then
+				-- Set note and reset offset to 0.
+				v:setPeriod(N)
+				v.currOffset = 0
+			end
+			-- Handle volume
+			if V then
+				v.currVolume = V / 0x40
+			else
+				-- Do nothing here.
+			end
+		elseif not N and     I then
+			-- Apply instrument
+			v.instrument = module.sample[I]
+			-- Handle volume
+			if V then
+				v.currVolume = V / 0x40
+			else
+				if v.instrument then
+					v.currVolume = v.instrument.volume / 0x40
+				end
+			end
+		elseif not N and not I then
+			-- Handle volume
+			if V then
+				v.currVolume = V / 0x40
+			else
+				-- Do nothing here.
+			end
 		end
 	end
 
-	-- Offset clamping for safety.
-	v._currentOffset = v._currentOffset % module.instruments[v.instrument].data:getSampleCount()
-
-	-- Interpolation
-	local smp
-	if interpolation == 'nearest' then
-		-- 0th order interpolation: nearest neighbour (piecewise constant)
-		smp = module.instruments[v.instrument].data:getSample(math.floor(v._currentOffset))
-	elseif interpolation == 'linear' then
-		-- 1st order interpolation: linear
-		local a = math.floor(v._currentOffset)
-		local b = math.floor(v._currentOffset) % module.instruments[v.instrument].data:getSampleCount()
-		local p = v._currentOffset - math.floor(v._currentOffset)
-		smp = module.instruments[v.instrument].data:getSample(a*p + b*(1.0-p))
+	if currentTick == 0 then
+		-- T0 Effects.
+		if     C == 'D' then
+			-- Volume SLide
+			if D > 0x00 then
+				v.fxSlotGeneric = D
+			end
+			local x = math.floor(v.fxSlotGeneric / 0x10)
+			local y =            v.fxSlotGeneric % 0x10
+			-- If we have a fine slide, then process it here.
+			-- Note that in the case of DFF, we prioritize by fine sliding up.
+			if     y == 0xF then
+				-- up x units
+				v.currVolume = math.min(1.0, v.currVolume + (x / 0x40))
+			elseif x == 0xF then
+				-- down y untis
+				v.currVolume = math.max(0.0, v.currVolume - (y / 0x40))
+			end
+			-- "Fast Volume Slide" bug handling
+			if module.fastVolSlides then
+				if     y == 0x0 then
+					-- up x units
+					v.currVolume = math.min(1.0, v.currVolume + (x / 0x40))
+				elseif x == 0x0 then
+					-- down y units
+					v.currVolume = math.max(0.0, v.currVolume - (y / 0x40))
+				end
+			end
+		elseif C == 'E' then
+			-- Portamento Down
+			if D > 0x00 then
+				v.fxSlotPortamento = D
+			end
+			local x = math.floor(v.fxSlotPortamento / 0x10)
+			local y =            v.fxSlotPortamento % 0x10
+			if     x == 0xF then
+				-- Fine porta
+				v.instPeriod = v.instPeriod + y * 4
+			elseif x == 0xE then
+				-- Extra fine porta
+				v.instPeriod = v.instPeriod + y
+			end
+			-- TODO: Period Clamping...
+		elseif C == 'F' then
+			-- Portamento Up
+			if D > 0x00 then
+				v.fxSlotPortamento = D
+			end
+			local x = math.floor(v.fxSlotPortamento / 0x10)
+			local y =            v.fxSlotPortamento % 0x10
+			if     x == 0xF then
+				-- Fine porta
+				v.instPeriod = v.instPeriod - y * 4
+			elseif x == 0xE then
+				-- Extra fine porta
+				v.instPeriod = v.instPeriod - y
+			end
+			-- TODO: Period Clamping...
+		elseif C == 'G' then
+			-- Tone portamento
+			if D > 0x00 then
+				v.fxSlotPortamento = D
+			end
+			if N and v.instrument then
+				v.glisPeriod = NOTEPERIOD[N] *
+					(DEFAULTC4SPEED / v.instrument.c4speed)
+			end
+		elseif C == 'O' then
+			-- Set Offset
+			v.fxSlotGeneric = D
+			v.fxSetOffset   = D * 0x100
+		end
+	else 
+		-- Tn Effects.
+		if     C == 'D' then
+			local x = math.floor(v.fxSlotGeneric / 0x10)
+			local y =            v.fxSlotGeneric % 0x10
+			if     y == 0x0 then
+				-- up x units
+				v.currVolume = math.min(1.0, v.currVolume + (x / 0x40))
+			elseif x == 0x0 then
+				-- down y units
+				v.currVolume = math.max(0.0, v.currVolume - (y / 0x40))
+			end
+		elseif C == 'E' then
+			local x = math.floor(v.fxSlotPortamento / 0x10)
+			if x < 0xE then
+				v.instPeriod = v.instPeriod + v.fxSlotPortamento * 4
+			end
+			-- TODO: Period Clamping...
+		elseif C == 'F' then
+			local x = math.floor(v.fxSlotPortamento / 0x10)
+			if x < 0xE then
+				v.instPeriod = v.instPeriod - v.fxSlotPortamento * 4
+			end
+			-- TODO: Period Clamping...
+		elseif C == 'G' then
+			if not glissando then
+				if     v.instPeriod > v.glisPeriod then
+					v.instPeriod = v.instPeriod - v.fxSlotPortamento * 4
+					if v.instPeriod < v.glisPeriod then
+						v.instPeriod = v.glisPeriod
+					end
+				elseif v.instPeriod < v.glisPeriod then
+					v.instPeriod = v.instPeriod + v.fxSlotPortamento * 4
+					if v.instPeriod > v.glisPeriod then
+						v.instPeriod = v.glisPeriod
+					end
+				end
+			else
+				-- TODO: Implement semitone-glissando.
+			end
+		end
 	end
-
-	return smp * v.sampleVolume * (1.0-v.panning), smp * v.sampleVolume * v.panning
 end
 
-local mtVoice = {__index = voice}
+Voice.render = function(v)
+	if v.instPeriod == 0 then return 0.0, 0.0 end
+	if not v.instrument or v.instrument.type == 0 then return 0.0, 0.0 end
 
-local newVoice = function()
-	local v = setmetatable({},mtVoice)
+	local smpL, smpR = 0.0, 0.0
 
-	v.processed = true  -- whether the voice should be processed or not
-	v.muted     = false -- whether the output of the voice should be silenced or not
+	if v.instrument.type == 1 then
+		-- Sampler.
+		v.currOffset = v.currOffset + (FIXEDCLOCK / v.instPeriod)
 
-	v._currentOffset = 0.0
+		if v.fxSetOffset > 0 then
+			-- Add setOffset parameter.
+			v.currOffset = v.currOffset + v.fxSetOffset
+			v.fxSetOffset = 0
+		end
 
-	v.notePeriod    = 0
-	v.instrument    = 0
+		if v.instrument.looped then
+			local addend = v.currOffset - v.instrument.loopEnd
+			if addend >= 0 then
+				v.currOffset = v.instrument.loopStart + addend
+			end
+		else
+			if v.currOffset > v.instrument.data:getSampleCount() *
+				v.instrument.data:getChannels()
+			then
+				v.currOffset = 0.0
+				v.instPeriod = 0 -- Only play the sample once.
+				return 0.0, 0.0
+			end
+		end
 
-	v.panning       = 0.0
+		v.currOffset = v.currOffset % (v.instrument.data:getSampleCount() *
+			v.instrument.data:getChannels())
 
-	v.sampleVolume  = 1.0 -- [ 0, 1]
-	v.sampleOffset  = 0.0 -- [ 0, 65280] Oxx
+		-- Interpolation
+		if interpolation == 'nearest' then
+			-- 0th order interpolation: nearest neighbour (piecewise constant)
+			if v.instrument.channelCount == 1 then
+				local p = math.floor(v.currOffset)
+				smpL = v.instrument.data:getSample(p)
+				smpR = smpL
+			else
+				-- Stereo is not standard ST3, but implementable.
+				local p = math.floor(v.currOffset)
+				p = p % 2 == 1 and p - 1 or p
+				smpL = v.instrument.data:getSample(p)
+				smpR = v.instrument.data:getSample(p + 1)
+			end
+		else
+			-- TODO: Other methods.
+		end
 
-	v.slideToNote = 0
-	-- apparently the effect memories have 3 slots; portamento, vibrato and everything else.
-	v.volSlide      = 0
-	v.portamento    = 0
-	v.vibrato       = 0
+		smpL = smpL * v.currVolume * (1.0 - v.currPanning)
+		smpR = smpR * v.currVolume *        v.currPanning
+		return smpL, smpR
+
+	elseif v.instrument.type == 2 then
+		-- TODO: AdLib melodics.
+	end
+end
+
+local mtVoice = {__index = Voice}
+
+Voice.new = function(pan)
+	local v = setmetatable({}, mtVoice)
+
+	-- Processing related.
+	v.disabled = false -- Whether or not the voice is processed.
+	v.muted    = false -- Whether or not the voice output is muted.
+
+	-- Per-event inputs.
+	v.n,  v.i,  v.v,  v.c,  v.d  = 0x00, 0x00, 0x00, 0x00, 0x00 -- Curr.
+	v.n_, v.i_, v.v_, v.c_, v.d_ = 0x00, 0x00, 0x00, 0x00, 0x00 -- Temp.
+
+	-- Calculated values.
+	v.instrument       = false  -- Reference to the current instrument.
+	v.notePeriod       = 0x0000 -- Base period value as taken from note data.
+	v.instPeriod       = 0x0000 -- True period value calc.-ed w/ the current instrument.
+	v.glisPeriod       = 0x0000 -- Final (true) period value of Gxx glissando effects.
+	v.currOffset       = 0.0    -- Current sample offset. (floored -> matrix displayable)
+	v.arpIndex         = 0x0    -- Running index for arpeggio effect.
+	v.arpOffset1       = 0x0    -- Arpeggio offsets.
+	v.arpOffset2       = 0x0    -- -"-
+	v.tremorIndex      = 0x00   -- Running index for tremor effect.
+	v.tremorOnTicks    = 0x0    -- Ticks while sound is unmuted.
+	v.tremorOffTicks   = 0x0    -- Ticks while sound is muted.
+	v.currVolume       = 0.0    -- Current volume.
+	v.currPanning      = pan/0xF-- Current panning.
+	v.noteDelayTicks   = 0x0    -- Ticks to delay note onsets.
+	v.noteCutTicks     = 0x0    -- Ticks to cut note sound after.
+
+	-- Emulate ST3 limited effect memory.
+	v.currEffect       = false  -- Current effect in effect.
+	v.fxSlotGeneric    = 0x00   -- Generic effect parameter slot.
+	v.fxSlotPortamento = 0x00   -- Portamento effect parameter slot.
+	v.fxSlotVibrato    = 0x00   -- Vibrato effect parameter slot.
+
+	-- These are so that we don't recalculate everything in :render().
+	v.fxSetOffset      = 0     -- Oxx setOffset
+
 
 	return v
 end
 
-local voices
--------------------------------
-
--- Functions
-
-local fixTiming = function()
-	midiPPQ        = speed * timeSigNumer * (4 / timeSigDenom)
-	tickPeriod     = 2.5 / tempo
-	actualBPM      = (60) / (tickPeriod * midiPPQ)
-end
-
-math.clamp = function(x,min,max)
-	if min>max then min,max=max,min end
-	return math.min(math.max(x, min), max)
-end
+-- The playroutine
 
 local routine = {}
 
+
+
 routine.load = function(mod)
 	module = mod
-	-- Set initial values.
-	tempo = module.initialTempo
-	speed = module.initialSpeed
 
-	fixTiming()
+	time = 0.0
+	samplesToMix = 0
 
-	-- Init to beginning.
-	currentOrder   = 0
-	currentPattern = module.orders[currentOrder]
-	currentRow     = 0
-	currentTick    = 0
-
-	-- Create voices for each track ("channel")
-	voices = {}
-	for i = 0, module.chnNum - 1 do
-		voices[i] = newVoice()
-		if module.defaultPan then
-			-- Is this correct? maybe the chn list used here is the unprocessed one...
-			voices[i].panning = module.defaultPan[i] / 0xF
-		else
-			-- Use the channel "orientation" values.
-			voices[i].panning = module.channelPan[i] / 0xF
-		end
+	loopRow, loopCnt = {}, {}
+	for ch = 0, module.channelCount-1 do
+		loopRow[ch] = 0
+		loopCnt[ch] = 0 
 	end
+	patternLoop = false
+	filterSet = false
 
-	-- Step the timer since startup may spike the dt, which
-	-- is bad news for any time-sensitive code.
+	interpolation = 'nearest'
+	smoothScrolling = true
+
+	positionJump, patternBreak, patternDelay = false, false, 0
+	glissando, globalVolume = false, module.globalVolume
+	vibratoWaveform, tremoloWaveform = 0, 0 -- Sine by default
+
+	timeSigNumer, timeSigDenom = 4, 4
+	speed = module.initialSpeed
+	tempo = module.initialTempo
+
+	tickPeriod, midiPPQ, actualTempo = FIXTIMING(
+		tempo, speed, timeSigNumer, timeSigDenom)
+
+	samplingPeriod = 1.0 / device.samplingRate
+
+	voice = {}
+	for ch=0, 31 do --module.channelCount-1 do
+		if module.channel[ch].map then
+			voice[module.channel[ch].map] = Voice.new(module.channel[ch].pan)
+		end
+		--voice[ch] = Voice.new(module.channel[ch].pan)
+	end
+	normalizer = module.channelCount
+	normRatio = math.sqrt(10.0^((normalizer-1.0)/10.0)) -- dB, probably.
+
+	tickAccumulator = 0.0
+	currentTick     = 0
+	currentRow      = 0
+	currentOrder    = 0
+	currentPattern  = module.order[currentOrder]
+
 	love.timer.step()
-
 end
 
-local FUCKB, FUCKC = 0.0, 0.0
+
+
+routine.process = function()
+	-- Process tracks
+	if currentPattern < 254 then
+		-- Reverse-iteration is needed to correctly process some effects.
+		for ch = module.channelCount-1, 0, -1 do
+			local cell = module.pattern[currentPattern][currentRow][ch]
+			-- Set cell data for voices.
+			voice[ch]:setNote(cell.note)
+			voice[ch]:setInstrument(cell.instrument)
+			voice[ch]:setVolume(cell.volume)
+			voice[ch]:setEffect(cell.effectCommand, cell.effectData)
+			-- After we set everything in the voice, process it.
+			voice[ch]:process(currentTick)
+			-- Handle playback modification and other globals locally here.
+			if currentTick == 0 and cell.effectCommand then
+				if     string.char(cell.effectCommand + 0x40) == 'A' then
+					-- Set Speed
+					if cell.effectData >= 0x01 and cell.effectData <= 0xFF then
+						speed = cell.effectData
+					end
+				elseif string.char(cell.effectCommand + 0x40) == 'T' then
+					-- Set Tempo
+					if cell.effectData >= 0x20 and cell.effectData <= 0xFF then
+						tempo = cell.effectData
+					end
+				elseif string.char(cell.effectCommand + 0x40) == 'B' then
+					-- Position Jump
+					positionJump = cell.effectData
+					-- Invalidate patternLoops that happened in a "later" 
+					-- channel.
+					patternLoop = false
+				elseif string.char(cell.effectCommand + 0x40) == 'C' then
+					-- Pattern Break
+					if cell.effectData <= 0x3F then
+						patternBreak = math.floor(cell.effectData/16)*10 +
+							cell.effectData%16
+						-- Invalidate patternLoops that happened in a "later" 
+						-- channel.
+						patternLoop = false
+					end
+				elseif string.char(cell.effectCommand + 0x40) == 'S' and
+					math.floor(cell.effectData/16) == 0x1 then
+						-- Glissando Control
+						local x = cell.effectData%16
+						if x == 0 then 
+							glissando = false
+						elseif x == 1 then
+							glissando = true
+						end
+				elseif string.char(cell.effectCommand + 0x40) == 'S' and
+					math.floor(cell.effectData/16) == 0x3 then
+						-- Vibrato Waveform
+						local x = cell.effectData%16
+						if x < 8 then
+							vibratoWaveform = x
+						end
+				elseif string.char(cell.effectCommand + 0x40) == 'S' and
+					math.floor(cell.effectData/16) == 0x4 then
+						-- Tremolo Waveform
+						local x = cell.effectData%16
+						if x < 8 then
+							tremoloWaveform = x
+						end
+				elseif string.char(cell.effectCommand + 0x40) == 'S' and
+					math.floor(cell.effectData/16) == 0xB then
+						-- Pattern Loop
+						local x = cell.effectData%16
+						if x == 0 then
+							loopRow[ch] = currentRow
+						else
+							if loopCnt[ch] == 0 then
+								loopCnt[ch] = x
+							else
+								loopCnt[ch] = loopCnt[ch] - 1
+							end
+							patternLoop = true
+							-- Invalidate positionJumps and patternBreaks that
+							-- happened in a "later" channel.
+							positionJump, patternBreak = false, false
+						end
+				elseif string.char(cell.effectCommand + 0x40) == 'S' and
+					math.floor(cell.effectData/16) == 0xE then
+						-- Pattern Delay
+						local x = cell.effectData%16
+						patternDelay = x
+				elseif string.char(cell.effectCommand + 0x40) == 'V' then
+					-- Global Volume
+					if cell.effectData <= 0x40 then
+						globalVolume = cell.effectData
+					end
+				end
+			end
+		end
+		-- Fix timing, since we may have modified it in one of the tracks.
+		tickPeriod, midiPPQ, actualTempo = FIXTIMING(
+			tempo, speed, timeSigNumer, timeSigDenom)
+	end
+end
+
+
+
+routine.step = function()
+	-- Advance playback position.
+
+	-- Default handling
+	if currentTick + 1 < speed + patternDelay then
+		currentTick = currentTick + 1
+	else
+		if patternDelay > 0 then patternDelay = 0 end
+		currentTick = 0
+		if currentRow + 1 < 64 then -- Row # constant & hardcoded in s3m.
+			currentRow = currentRow + 1
+		else
+			currentRow = 0
+			if currentOrder + 1 < module.orderCount then
+				currentOrder   = currentOrder + 1
+				currentPattern = module.order[currentOrder]
+			else
+				currentOrder   = 0 -- No song restart marker in s3m.
+				currentPattern = module.order[currentOrder]
+			end
+			-- Invalidate loop points if we leave a pattern
+			for ch = 0, module.channelCount-1 do
+				loopRow[ch] = 0
+				loopCnt[ch] = 0 
+			end
+		end
+	end
+	-- Loop handling
+	if patternLoop and currentTick == 0 then 
+		for ch = 0, module.channelCount-1 do
+			-- TODO: Check if this processing order is right or wrong.
+			if loopCnt[ch] > 0 then
+				currentRow = loopRow[ch]
+				patternLoop = false
+				break
+			end
+		end
+	end
+	-- Jump handling
+	if positionJump or patternBreak then
+		if currentTick == 0 then
+			if positionJump and not patternBreak then
+				-- Jump to 0th row of given order.
+				currentOrder   = positionJump % module.orderCount
+				currentPattern = module.order[currentOrder]
+				currentRow     = 0
+			elseif not positionJump and patternBreak then
+				-- Jump to given row of next order.
+				currentOrder   = (currentOrder + 1) % module.orderCount
+				currentPattern = module.order[currentOrder]
+				if currentPattern < 254 then
+					currentRow = patternBreak % 64 -- See above.
+				end
+			else
+				-- Jump to given row of given order.
+				currentOrder   = positionJump % module.orderCount
+				currentPattern = module.order[currentOrder]
+				if currentPattern < 254 then
+					currentRow = patternBreak % 64 -- See above.
+				end
+			end
+			positionJump, patternBreak = false, false
+		end
+	end
+	-- Marker/Empty pattern skips
+	if currentPattern >= 254 then
+		for ord = currentOrder, module.orderCount-1 do
+			if module.order[ord] < 254 then
+				currentOrder   = ord
+				currentPattern = module.order[currentOrder]
+				currentRow     = 0
+				currentTick    = 0
+				break
+			end
+		end
+		if currentPattern >= 254 then
+			-- Restart from beginning.
+			currentOrder   = 0
+			currentPattern = module.order[currentOrder]
+			currentRow     = 0
+			currentTick    = 0
+			time = 0
+		end
+	end
+end
+
+
+
+routine.render = function(dt)
+	-- Rendermode
+	if device.renderMode == 'CPU' then
+		-- We could check the buffer state here, like below, but that would
+		-- swap underruns with rendering slowdowns.
+		samplesToMix = math.min(
+			math.floor(dt / samplingPeriod)
+			,buffer.data:getSampleCount()
+		)
+
+	elseif device.renderMode == 'Buffer' then
+		if source.queue:getFreeBufferCount() == 0 then return end
+		samplesToMix = math.min(
+			math.floor(tickPeriod / samplingPeriod),
+			buffer.data:getSampleCount()
+		)
+	end
+
+	if samplesToMix == 0 then return end
+
+	for i=0, samplesToMix-1 do
+		local smpL, smpR = 0.0, 0.0
+		for v=0, module.channelCount-1 do
+			local L, R = 0.0, 0.0
+			-- Render each voice, and mix them together.
+			if not voice[v].muted then
+				L, R = voice[v]:render()
+				smpL, smpR = smpL + L, smpR + R
+			end
+		end
+
+		-- Normalize output.
+		smpL, smpR = smpL / normRatio, smpR / normRatio
+
+		-- Write samples to buffer.
+		buffer.data:setSample(buffer.offset  , smpL)
+		buffer.data:setSample(buffer.offset+1, smpR)
+
+		-- Advance buffer position, if it's full, queue it and reset buffer.
+		buffer.offset = buffer.offset + 2
+		if buffer.offset >= buffer.data:getSampleCount() *
+			buffer.data:getChannels()
+			then
+			buffer.offset = 0
+			source.queue:queue(buffer.data)
+			source.queue:play()
+		end
+
+		-- This tracking mode should be the most precise, since it's updated
+		-- each time an smp (or two, because stereo...) gets rendered.
+		if device.trackingMode == 'Buffer' then
+			tickAccumulator = tickAccumulator + samplingPeriod
+			if tickAccumulator >= tickPeriod then
+				-- If a tick was rendered fully, process the next tick, and
+				-- advance the playback position.
+				routine.process()
+				routine.step()
+				tickAccumulator = tickAccumulator - tickPeriod
+				time = time + tickPeriod
+			end
+		end
+	end
+end
+
+
+
 routine.update = function(dt)
 
-	FUCKC = dt
+	-- Render sound.
+	routine.render(dt)
 
-	-- This always happens with the function call.
-	cpuTime = cpuTime + dt
-
-	-- If there are no more free internal buffers, return early.
-	if qSource:getFreeBufferCount() == 0 then
-		return
-	end
-
-	-- Advance the playback cursor using one of the below methods.
-	if trackingMode == 'cpu' then
-		tickAccum = tickAccum + dt
-	elseif trackingMode == 'buffer' then
-		tickAccum = tickAccum + (samplesMixed * samplingPeriod)
-	end
-
-	-- If we've accumulated enough to reach a new tick, process it.
-	if tickAccum >= tickPeriod then
-	--while tickAccum >= tickPeriod do -- No, we're not skipping any ticks under any circumstances.
-		tickAccum = tickAccum - tickPeriod
-
-		-- Skip marker and empty patterns (254, 255).
-		if currentPattern < 254 then
-
-			-- Process tracks ("channels").
-			for ch=0, module.chnNum-1 do
-
-				-- TODO: Playback/Disable (not Mute) channels should be implemented here.
-
-				local channel = module.patterns[currentPattern][currentRow][ch]
-
-				if channel then
-
-					local effect      = channel.effectcmd
-					effect = effect and string.char(effect+64) or false
-					local effectParam = channel.effectprm
-
-					-- First tick of every row.
-					if currentTick == 0 then
-
-
-						-- Check for cell components.
-
-						local note       = channel.note
-						local instrument = channel.instrument
-						local volume     = channel.volumecmd
-
-						-- Process according to overcomplicated logic
-						-- regarding extant or missing elements...
-
-						-- Y Note, Y Instrument -> retrigger note, switch instrument, set   volume (vol or max)
-						-- Y Note, N Instrument -> retrigger note, leave  instrument, leave volume
-						-- N Note, Y Instrument -> leave     note, switch instrument, set   volume (vol or max)
-						-- N Note, N Instrument -> check volume
-
-						if note == '^^ ' then
-							-- Note cut.
-							voices[ch].notePeriod = 0
-							note = false
-						end
-
-						-- At this point, note can only be a number or false.
-						if note and instrument then
-							-- Note pitch.
-							if effect ~= 'G' then
-								voices[ch]:setNote(note)
-								voices[ch]._currentOffset = 0.0
-							end
-							-- Apply instrument.
-							voices[ch]:setInstrument(instrument-1)
-							-- Set volume.
-							if volume then
-								-- Apply extra volume command.
-								-- Range: 0x00-0x40, so normalize by 64.
-								voices[ch]:setVolume(volume / 64)
-							else
-								if module.instruments[voices[ch].instrument].type == 1 then
-									voices[ch]:setVolume(module.instruments[voices[ch].instrument].volume / 64)
-								end
-							end
-						elseif note and not instrument then
-							-- Note pitch.
-							if effect ~= 'G' then
-								voices[ch]:setNote(note)
-								voices[ch]._currentOffset = 0.0
-							end
-							-- We only set volume if the command is present here.
-							if volume then
-								-- Apply extra volume command.
-								-- Range: 0x00-0x40, so normalize by 64.
-								voices[ch]:setVolume(volume / 64)
-							end
-						elseif not note and instrument then
-							-- Apply instrument.
-							voices[ch]:setInstrument(instrument-1)
-							-- Set volume.
-							if volume then
-								-- Apply extra volume command.
-								-- Range: 0x00-0x40, so normalize by 64.
-								voices[ch]:setVolume(volume / 64)
-							else
-								if module.instruments[voices[ch].instrument].type == 1 then
-									voices[ch]:setVolume(module.instruments[voices[ch].instrument].volume / 64)
-								end
-							end
-						elseif not note and not instrument then
-							-- Set volume.
-							if volume then
-								-- Apply extra volume command.
-								-- Range: 0x00-0x40, so normalize by 64.
-								voices[ch]:setVolume(volume / 64)
-							else
-								--voices[ch]:setVolume(module.instruments[voices[ch].instrument].volume / 64)
-							end
-						end
-
-
-
-						-- T0 effects.
-						if     effect == 'A' then
-							-- Set Speed
-							-- 0 speed not allowed for obvious reasons.
-							if effectParam >= 0x01 and effectParam <= 0xFF then
-								speed = effectParam
-							end
-						elseif effect == 'T' then
-							-- Set Tempo
-							-- Minimum tempo should be 32 BPM, though we technically COULD allow lower values.
-							if effectParam >= 0x20 and effectParam <= 0xFF then
-								tempo = effectParam
-							end
-						elseif effect == 'B' then
-							-- Position Jump (to order)
-							posJump = math.clamp(effectParam, 0x00, 0xFF)
-						elseif effect == 'C' then
-							-- Pattern Break (to row)
-							-- Stored as two decimal digits, so needs conversion.
-							patBreak = math.clamp(math.floor(effectParam/16)*10 + effectParam%16, 0, 63)
-						elseif effect == 'O' then
-							-- Set (sample) Offset
-							local offset = math.clamp(effectParam, 0x00, 0xFF)
-							offset = offset * 0x100
-							voices[ch]:setOffset(offset)
-						elseif effect == 'D' then
-							-- Store values if parameter is not 00
-							if effectParam > 0 then
-								voices[ch].volSlide = effectParam
-							end
-							-- Work on stored values
-							local x = math.floor(voices[ch].volSlide/16)
-							local y =            voices[ch].volSlide%16
-							-- If we have a fine slide, then process it here.
-							-- Note that in the case of DFF, we prioritize by fine sliding up.
-							if y == 0xF then
-								-- up x units
-								voices[ch].sampleVolume = voices[ch].sampleVolume + x / 64
-							elseif x == 0xF then
-								-- down y units
-								voices[ch].sampleVolume = voices[ch].sampleVolume - y / 64
-							end
-							-- "Fast Volume Slide" bug handling
-							-- (Flags parsing not yet implemented, append this when it is.)
-							if module.version == '3.00' then
-								if y == 0x0 then
-									-- up x units
-									voices[ch].sampleVolume = voices[ch].sampleVolume + x / 64
-								elseif x == 0x0 then
-									-- down y units
-									voices[ch].sampleVolume = voices[ch].sampleVolume - y / 64
-								end
-							end
-							-- Fix bounds.
-							voices[ch].sampleVolume = math.clamp(voices[ch].sampleVolume, 0, 1)
-						elseif effect == 'E' then
-							-- Store values if parameter is not 00
-							if effectParam > 0 then
-								voices[ch].portamento = effectParam
-							end
-							
-							if math.floor(voices[ch].portamento/16) == 0xF then
-								-- Fine porta
-								voices[ch].notePeriod = voices[ch].notePeriod + (voices[ch].portamento%16) * 4
-							elseif math.floor(voices[ch].portamento/16) == 0xE then
-								-- Extra fine porta
-								voices[ch].notePeriod = voices[ch].notePeriod + (voices[ch].portamento%16)
-							end
-							-- Probably should clamp period values too...
-						elseif effect == 'F' then
-							-- Store values if parameter is not 00
-							if effectParam > 0 then
-								voices[ch].portamento = effectParam
-							end
-							
-							if math.floor(voices[ch].portamento/16) == 0xF then
-								-- Fine porta
-								voices[ch].notePeriod = voices[ch].notePeriod - (voices[ch].portamento%16) * 4
-							elseif math.floor(voices[ch].portamento/16) == 0xE then
-								-- Extra fine porta
-								voices[ch].notePeriod = voices[ch].notePeriod - (voices[ch].portamento%16)
-							end
-							-- Probably should clamp period values too...
-						elseif effect == 'G' then
-							-- Store values if parameter is not 00
-							-- Note that this uses the same slot that E/F uses.
-							if effectParam > 0 then
-								voices[ch].portamento = effectParam
-							end
-							if note then
-								voices[ch].slideToNote = notePeriod[note]
-							end
-						end
-
-					else
-						-- Inbetween Effects (All ticks except T0).
-
-						if     effect == 'D' then
-							-- Work on stored values
-							local x = math.floor(voices[ch].volSlide/16)
-							local y =            voices[ch].volSlide%16
-							-- If we don't have a fine slide, then process it here.
-							if y == 0x0 then
-								-- up x units
-								voices[ch].sampleVolume = voices[ch].sampleVolume + x / 64
-							elseif x == 0x0 then
-								-- down y units
-								voices[ch].sampleVolume = voices[ch].sampleVolume - y / 64
-							end
-							-- Fix bounds.
-							voices[ch].sampleVolume = math.clamp(voices[ch].sampleVolume, 0, 1)
-						elseif effect == 'E' then
-							if voices[ch].portamento < 0xE0 then
-								voices[ch].notePeriod = voices[ch].notePeriod + voices[ch].portamento * 4
-							end
-							-- Probably should clamp period values too...
-						elseif effect == 'F' then
-							if voices[ch].portamento < 0xE0 then
-
-								if ch == 7 then print(currentTick, voices[ch].notePeriod, voices[ch].portamento, voices[ch].notePeriod - voices[ch].portamento * 4) end
-
-								voices[ch].notePeriod = voices[ch].notePeriod - voices[ch].portamento * 4
-								-- "2ND_PM.S3M ptrn 17 test case (openmpt):"
-								-- A-5 + 37 (* (3-1) ticks) => D#6
-								-- 508 - (37*2*4) = 360
-								-- 508 - 296 = 212 (C-6)
-								--
-								-- What really happens:
-								-- 1076 (G#4) - 148 (37 * 4) => 928 - 148 (37 * 4) -> 780 (D-5)
-
-								-- The issue may be with that we should apply these AFTER the
-								-- defaultC4 - instrumentC4 normalization...
-							end
-							-- Probably should clamp period values too...
-						elseif effect == 'G' then
-							-- Slide to the given note.
-							-- Note that because of the *4, we need to manually avoid any potential oscillation.
-							if voices[ch].notePeriod > voices[ch].slideToNote then
-								voices[ch].notePeriod = voices[ch].notePeriod - voices[ch].portamento * 4
-								if voices[ch].notePeriod < voices[ch].slideToNote then
-									voices[ch].notePeriod = voices[ch].slideToNote
-								end
-							elseif voices[ch].notePeriod < voices[ch].slideToNote then
-								voices[ch].notePeriod = voices[ch].notePeriod + voices[ch].portamento * 4
-								if voices[ch].notePeriod > voices[ch].slideToNote then
-									voices[ch].notePeriod = voices[ch].slideToNote
-								end
-							end
-						end
-
-					end
-
-				end
-
-			end
-
-			-- Fix timing, since we may have modified it in one of the tracks.
-			fixTiming()
-
-		end
-
-		-- Advance playback position.
-
-		-- Simple case.
-		if currentTick + 1 < speed then
-			currentTick = currentTick + 1
-		else
-			currentTick = 0
-			--print(currentOrder, currentPattern)
-			if currentRow + 1 <= #module.patterns[currentPattern] then
-				currentRow = currentRow + 1
-			else
-				currentRow = 0
-				if currentOrder + 1 <= #module.orders then
-					currentOrder = currentOrder + 1
-					currentPattern = module.orders[currentOrder]
-				else
-					currentOrder = 0
-					currentPattern = module.orders[currentOrder]
-				end
-			end
-		end
-
-		-- Special handling.
-		if posJump or patBreak then
-			-- we need to do this on the next T0 tick...
-			if currentTick == 0 then
-				currentTick = 0
-				if posJump and not patBreak then
-					-- Jump to 0th row of given order.
-					currentOrder = posJump % #module.orders
-					currentPattern = module.orders[currentOrder]
-					currentRow = 0
-				elseif not posJump and patBreak then
-					-- Jump to given row of next order.
-					currentOrder = (currentOrder + 1) % #module.orders
-					currentPattern = module.orders[currentOrder]
-					if currentPattern < 254 then
-						currentRow = patBreak % #module.patterns[currentPattern]
-					end
-				else
-					-- Jump to given row of given order.
-					currentOrder = posJump % #module.orders
-					currentPattern = module.orders[currentOrder]
-					if currentPattern < 254 then
-						currentRow = patBreak % #module.patterns[currentPattern]
-					end
-				end
-				posJump, patBreak = false, false
-			end
-		end
-
-		-- Check for markers and empty pattern slots.
-		-- Not sure if 255 can appear between legit slots or not, if not, this code
-		-- can be adjusted a bit.
-		if currentPattern >= 254 then
-			--print "Found Marker / Empty pattern!"
-			for i = currentOrder, #module.orders do
-				--print("order ",i,"has pattern ",module.orders[i])
-				if module.orders[i] < 254 then
-					currentOrder = i
-					currentPattern = module.orders[currentOrder]
-					-- Unless we want the code jumping in the middle of random patterns
-					-- if the posjump/patbreak would go to an invalid pattern, then
-					-- leave this uncommented.
-					currentTick = 0
-					currentRow = 0
-					break
-				end
-			end
-			if currentPattern >= 254 then
-				-- Restart from beginning
-				currentOrder = 0
-				currentPattern = module.orders[currentOrder]
-				currentTick = 0
-				currentRow = 0
-			end
+	-- This one's less precise, but it doesn't consume as much processing time.
+	if device.trackingMode == 'CPU' then
+		tickAccumulator = tickAccumulator + dt
+		if tickAccumulator >= tickPeriod then
+			-- If a tick was rendered fully, process the next tick, and advance
+			-- the playback position.
+			routine.process()
+			routine.step()
+			tickAccumulator = tickAccumulator - tickPeriod
+			time = time + tickPeriod
 		end
 	end
-
-	-- Render samplepoint(s).
-	local samplesToMix
-	if trackingMode == 'cpu' then
-		-- This version is guaranteed to keep up, but
-		-- sadly it's prone to hiccups.
-		samplesToMix = math.ceil(dt / samplingPeriod)
-	elseif trackingMode == 'buffer' then
-		-- This version should be the better one;
-		-- Try rendering as many smp-s as there are in one tick.
-		--samplesToMix = math.min(math.floor(tickPeriod / samplingPeriod), buffer:getSampleCount())
-		--samplesToMix = math.floor(1 / tickPeriod)
-
-		-- This one seems to work, when the samplecount is less (or equal?) than the buffer's size.
-		samplesToMix = math.floor(tickPeriod / samplingPeriod)
-	end
-	for i=0, samplesToMix-1 do
-
-		-- Render each voice, and mix them together
-		-- |output| <= 1.0 * N -> Normalize to [-1,1]
-		local smpL, smpR = 0.0, 0.0
-		for ch = 0, module.chnNum - 1 do
-			-- TODO: Playback/Mute (not Disable) channels should be implemented here.
-			local L, R = 0.0, 0.0
-			if not voices[ch].muted then
-				L, R = voices[ch]:process()
-				smpL, smpR = smpL + L, smpR + (R or 0.0)
-			end
-		end
-
-		--smpL, smpR = smpL / 32.0, smpR / 32.0
-		--smpL, smpR = smpL / module.chnNum, smpR / module.chnNum
-		local ratio = math.sqrt(10^((module.chnNum-1)/10))
-		smpL, smpR = smpL / ratio, smpR / ratio
-
-		buffer:setSample(bufferOffset  , smpL)
-		buffer:setSample(bufferOffset+1, smpR)
-
-		-- Advance buffer pointer, flush buffer if full.
-		bufferOffset = bufferOffset + 2
-		if bufferOffset >= buffer:getSampleCount()*buffer:getChannels() then
-			bufferOffset = 0
-			qSource:queue(buffer)
-			qSource:play() -- For safety.
-		end
-	end
-
-	samplesMixed = samplesToMix
-	samplesTotal = samplesTotal + samplesMixed
-
-	-- How much time elapsed with regards to processed smp-s.
-	bufferTime = bufferTime + (samplesMixed * samplingPeriod)
-
-	FUCKB = (samplesMixed * samplingPeriod)
 end
 
-local showStats = true
-local renderGraphics = true
-local textCP, textPP, textNP, textStats
-textCP    = love.graphics.newText(love.graphics.getFont())
-textPP    = love.graphics.newText(love.graphics.getFont())
-textNP    = love.graphics.newText(love.graphics.getFont())
-textStats = love.graphics.newText(love.graphics.getFont())
+
+
+local noteTf = function(n)
+	local symbol = {[0] = '-','#','-','#','-','-','#','-','#','-','#','-'}
+	local letter = {[0] = 'C', 'C', 'D', 'D', 'E', 'F', 'F', 'G', 'G', 'A',
+		'A', 'B'}
+	if n == 254 then
+		return '^^ '
+	elseif n == 255 then
+		return '...'
+	else
+		local class = n % 0x10
+		local oct = math.floor(n / 0x10) - 1
+		return ("%1s%1s%1X"):format(letter[class], symbol[class], oct)
+	end
+end
+local textCP, textPP, textNP
+textCP = love.graphics.newText(love.graphics.getFont())
+textPP = love.graphics.newText(love.graphics.getFont())
+textNP = love.graphics.newText(love.graphics.getFont())
 routine.draw = function()
-	-- TODO:
-	-- stats should have more entries, and should be more logically laid out...
-	-- Window width should be 2*8 + (numChans * 13 * 8) + ((numChans + 1) * 8)
-	-- Which is rows, channel contents and divisor lines. (though it should not be wider than the user's screen width)
-
-	if renderGraphics then
-
 	love.graphics.setBackgroundColor(0.1,0.2,0.4)
 
-	textStats:clear()
+	-- Patterns
+	love.graphics.push()
+	love.graphics.translate(0, 300+(-12*currentRow))
 
-	local color
+	textPP:clear()
+	textCP:clear()
+	textNP:clear()
 
-	if module then
+	local prev, curr, next, color
+	curr = module.pattern[module.order[currentOrder]]
+	prev = module.pattern[module.order[(currentOrder - 1) % module.orderCount]]
+	next = module.pattern[module.order[(currentOrder + 1) % module.orderCount]]
 
-		textCP:clear()
-		textPP:clear()
-		textNP:clear()
+	local subOffset = 0
+	if smoothScrolling then
+		subOffset = -math.floor((currentTick / (speed + patternDelay)) * 12)
+	end
 
-		if not module.patterns[currentPattern] then return end
+	-- 227*8 == 1816 horizontal width would be needed to show 16 s3m channels.
 
-		love.graphics.push('all')
-		love.graphics.translate(0, 300+(-12*currentRow))
+	for row = 0, 63 do
+		if prev then
+			color = {0.5,0.5,0.25}
+			textPP:add({color, ("%02X"):format(row)},
+				0, 84+(row-64)*12+subOffset)
+			for ch = 0, module.channelCount-1 do
+				textPP:add({color, ("|%3s %2s %2s %1s%2s"):format(
+					prev[row][ch].note and
+						noteTf(prev[row][ch].note) or '...',
+					prev[row][ch].instrument and
+						("%02X"):format(prev[row][ch].instrument) or '..',
+					prev[row][ch].volume and
+						("%02X"):format(prev[row][ch].volume) or '..',
+					prev[row][ch].effectCommand and
+						string.char(prev[row][ch].effectCommand + 0x40) or '.',
+					prev[row][ch].effectData and
+						("%02X"):format(prev[row][ch].effectData) or '..')},
+					2*8+ch*14*8, 84+(row-64)*12+subOffset)
+			end
+			textPP:add({color, "|"},
+				2*8+module.channelCount*14*8, 84+(row-64)*12+subOffset)
+		end
 
-		for i=0, #module.patterns[currentPattern] do
-			if i ~= currentRow then
+		if curr then
+			if row ~= currentRow then
 				color = {0.75,0.75,0.75}
+			elseif currentTick == 0 then
+				color = {1.0,1.0,1.0}
 			else
-				if     currentTick == 0 then
-					color = {1.0,1.0,1.0}
-				else
-					color = {0.75,0.75,0.25}
-				end
+				color = {0.75,0.75,0.25}
 			end
-			textCP:add({color, ("%02X"):format(i)}, 0, 84+i*12)
-			textCP:add({color, module.printRow(module.patterns[currentPattern][i], module.chnNum)}, 2*8, 84+i*12)
-		end
-
-		-- Extra pattern data
-		local temp
-
-		-- Prev.
-		color = {0.5,0.5,0.25}
-		temp = module.orders[(currentOrder - 1) % #module.orders]
-		if module.patterns[temp] then
-			for i=0, #module.patterns[temp] do
-				textPP:add({color, module.printRow(module.patterns[temp][i], module.chnNum)}, 2*8, 84+(i-64)*12)
+			textCP:add({color, ("%02X"):format(row)}, 0, 84+row*12+subOffset)
+			for ch = 0, module.channelCount-1 do
+				textCP:add({color, ("|%3s %2s %2s %1s%2s"):format(
+					curr[row][ch].note and noteTf(curr[row][ch].note) or '...',
+					curr[row][ch].instrument and ("%02X"):format(curr[row][ch].instrument) or '..',
+					curr[row][ch].volume and ("%02X"):format(curr[row][ch].volume) or '..',
+					curr[row][ch].effectCommand and string.char(string.byte('A') + curr[row][ch].effectCommand - 1) or '.',
+					curr[row][ch].effectData and ("%02X"):format(curr[row][ch].effectData) or '..')},
+					2*8+ch*14*8, 84+row*12+subOffset)
 			end
+			textCP:add({color, "|"}, 2*8+module.channelCount*14*8, 84+row*12+subOffset)
 		end
 
-		-- Next
-		color = {0.5,0.25,0.75}
-		temp = module.orders[(currentOrder + 1) % #module.orders]
-		if module.patterns[temp] then
-			for i=0, #module.patterns[temp] do
-				textNP:add({color, module.printRow(module.patterns[temp][i], module.chnNum)}, 2*8, 84+(i+64)*12)
+		if next then
+			color = {0.5,0.25,0.75}
+			textNP:add({color, ("%02X"):format(row)}, 0, 84+(row+64)*12+subOffset)
+			for ch = 0, module.channelCount-1 do
+				textNP:add({color, ("|%3s %2s %2s %1s%2s"):format(
+					next[row][ch].note and noteTf(next[row][ch].note) or '...',
+					next[row][ch].instrument and ("%02X"):format(next[row][ch].instrument) or '..',
+					next[row][ch].volume and ("%02X"):format(next[row][ch].volume) or '..',
+					next[row][ch].effectCommand and string.char(string.byte('A') + next[row][ch].effectCommand - 1) or '.',
+					next[row][ch].effectData and ("%02X"):format(next[row][ch].effectData) or '..')},
+					2*8+ch*14*8, 84+(row+64)*12+subOffset)
 			end
-		end
-
-		love.graphics.draw(textPP, 0, 0)
-		love.graphics.draw(textCP, 0, 0)
-		love.graphics.draw(textNP, 0, 0)
-
-		love.graphics.pop()
-
-		if showStats then
-
-			love.graphics.setColor(0,0,0.3)
-			love.graphics.rectangle('fill',0,0,64*8,96)
-
-			love.graphics.setColor(1,1,1)
-
-			textStats:add(("Order:   %d"):format(currentOrder),   42*8, 0)
-			textStats:add(("Pattern: %d"):format(currentPattern), 42*8, 12)
-			textStats:add(("Row:     %d"):format(currentRow),     42*8, 24)
-			textStats:add(("Tick:    %d"):format(currentTick),    42*8, 36)
-			textStats:add(("Speed:   %d"):format(speed),          42*8, 48)
-			textStats:add(("Tempo:   %d"):format(tempo),          42*8, 60)
-			textStats:add(("Timing:  %s"):format(trackingMode),   42*8, 72)
-
-			textStats:add(("/ %d"):format(#module.orders),                   56*8, 0)
-			textStats:add(("/ %d"):format(#module.patterns),                 56*8, 12)
-			textStats:add(("/ %d"):format(#module.patterns[currentPattern]), 56*8, 24)
-			textStats:add(("/ %d"):format(speed-1),                          56*8, 36)
-
-		end
-
-		-- Experimental realtime "voice properities" "matrix"
-		love.graphics.push()
-		love.graphics.translate(64*8,0)
-		love.graphics.setColor(0,0,0.3)
-		love.graphics.rectangle('fill',0,0,30*8,(#voices+2)*12)
-		love.graphics.setColor(1,1,1)
-		love.graphics.print("note fixd ins vol pan tnoffset", 0, 0)
-		for ch=0, #voices do
-			local n,i,v,p,co,cp = voices[ch]:stats() -- period, inst, vol, panning, curroffs, currPeriod
-			love.graphics.print(("%4X %4X %2X  %2X  %2X  %8X"):format(n,cp,i,v*64,p*15,co), 0, 12*(ch+1))
-		end
-		love.graphics.pop()
-
-	end
-
-	if showStats then
-
-		textStats:add(("Samples mixed:       %d (%d)"):format(samplesMixed, math.floor(samplesTotal/bufferSize)), 0, 0)
-		--love.graphics.print(("Playback position:   %d"):format(playbackPos),         0, 12)
-		love.graphics.print(("Latency:             %5.5g"):format((FUCKC-FUCKB)*1000),     0, 12)
-		textStats:add(("Time (Buffer-based): %5.5g"):format(bufferTime),       0, 24)
-		textStats:add(("Time (Timer-based):  %5.5g"):format(cpuTime),          0, 36)
-		textStats:add(("Sampling period:     %g"):format(samplingPeriod*1000), 0, 48)
-		textStats:add(("Tick period:         %g"):format(tickPeriod*1000),     0, 60)
-		textStats:add(("Actual Tempo:        %g"):format(actualBPM),           0, 72)
-
-		textStats:add("smps",    32*8, 0)
-		--textStats:add("ticks",   32*8, 12)
-		textStats:add("ms",   32*8, 12)
-		textStats:add("seconds", 32*8, 24)
-		textStats:add("seconds", 32*8, 36)
-		textStats:add("ms",      32*8, 48)
-		textStats:add("ms",      32*8, 60)
-		textStats:add("BPM",     32*8, 72)
-
-		love.graphics.draw(textStats, 0, 0)
-
-	end
-
-	end
-
-end
--------------------------------
-
-love.keypressed = function(k,s)
-	if s == 't' then
-		if trackingMode == 'buffer' then trackingMode = 'cpu' else trackingMode = 'buffer' end
-	end
-	if s == 'i' then
-		if interpolation == 'nearest' then interpolation = 'linear' else interpolation = 'nearest' end
-	end
-	if tonumber(s) or tonumber(k) then
-		if k == '0' then s = '0' end
-		if voices[tonumber(s)] then
-			voices[tonumber(s)].muted = not voices[tonumber(s)].muted
+			textNP:add({color, "|"}, 2*8+module.channelCount*14*8, 84+(row+64)*12+subOffset)
 		end
 	end
-	if s == 'f1' then showStats = not showStats end
-	if s == 'f2' then renderGraphics = not renderGraphics end
+
+	love.graphics.draw(textPP, 0, 0)
+	love.graphics.draw(textCP, 0, 0)
+	love.graphics.draw(textNP, 0, 0)
+
+	love.graphics.pop()
+
+	-- Stats
+	love.graphics.push()
+	love.graphics.setColor(0,0,0.3)
+	love.graphics.rectangle('fill',0,0,73*8,60)
+	love.graphics.setColor(1,1,1)
+	love.graphics.translate(0,-2)
+	local i,f
+	local y, w = 0, 12
+	love.graphics.print(("order:   0x%02X / 0x%02X"):format(
+		currentOrder, module.orderCount),   0, y)
+	y = y + w
+	love.graphics.print(("pattern: 0x%02X / 0x%02X"):format(
+		currentPattern, module.patternCount), 0, y)
+	y = y + w
+	love.graphics.print(("row:     0x%02X / 0x%02X"):format(
+		currentRow, 64),     0, y)
+	y = y + w
+	love.graphics.print(("tick:    0x%02X / 0x%02X"):format(
+		currentTick, speed),    0, y)
+	y = y + w
+	local h,m
+	h = math.floor(time/3600)
+	m = math.floor((time/60)%60)
+	i = math.floor(time%60)
+	f = math.floor((time%1)*1000000)
+	love.graphics.print(("elapsed time: %02d:%02d:%02d.%06d"):format(
+		h, m, i, f), 0, y)
+	y = 0
+	love.graphics.print(("tempo (T): %3d"):format(tempo), 23*8, y)
+	y = y + w
+	love.graphics.print(("speed (A): %3d"):format(speed+1), 23*8, y)
+	y = y + w
+	i = math.floor(samplingPeriod*1000000)
+	f = math.floor(samplingPeriod*10000000000) - (i * 10000)
+	love.graphics.print(("s-period: %4d.%04d μs"):format(i, f), 23*8, y)
+	y = y + w
+	i = math.floor(tickPeriod*1000)
+	f = math.floor(tickPeriod*10000000) - (i * 10000)
+	love.graphics.print(("t-period: %4d.%04d ms"):format(i, f), 23*8, y)
+	y = 0
+	i = math.floor(actualTempo)
+	f = math.floor(actualTempo*10000) - (i * 10000)
+	love.graphics.print(("true tempo: %4d.%04d BPM"):format(i, f), 48*8, y)
+	y = y + w
+	love.graphics.print(("mixed smp-s: %4d"):format(samplesToMix), 48*8, y)
+	y = y + w
+	love.graphics.print(("Timing:   %s"):format(device.renderMode), 48*8, y)
+	y = y + w
+	love.graphics.print(("Tracking: %s"):format(device.trackingMode), 48*8, y)
+	love.graphics.pop()
+
+	-- Matrix
+	love.graphics.push()
+	love.graphics.translate(74*8, 0)
+	love.graphics.setColor(0,0,0.25)
+	love.graphics.rectangle('fill',0,0,73*8,(module.channelCount+1)*12)
+	love.graphics.setColor(1,1,1)
+	love.graphics.translate(0,-2)
+	love.graphics.print(
+		'Ch nPer Nx d c | Ix Vx Cx Dx | gPer iPer | smpO',
+		 0, 0)
+--love.graphics.print(
+--	"Ch | Nx Ix Vx Cx Dx | nPer gPer iPer | cOfs smpL smpS smpE Cspd | cV cP | FX Fg Fp Fv | DC T+- A12",
+--	0, 0)
+	for ch = 0, module.channelCount-1 do
+		-- A A A A B B C D -- notePeriod n noteDelayTicks noteCutTicks
+		-- E E F F G G H H -- i v c d
+		-- I I I I J J J J -- glisPeriod instPeriod
+		local stats = {voice[ch]:getStatistics()}
+		love.graphics.print((
+			"%02X %04X %02X %1X %1X | %02X %02X %02X %02X | %04X %04X | %04X"
+			):format(ch, unpack(stats)), 0, (ch+1)*12)
+	end
+	love.graphics.pop()
 end
 
 --------------
 return routine
--------------------------------
