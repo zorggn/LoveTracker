@@ -15,7 +15,7 @@ local device = Device(44100, 16, 2, 1024, 'Buffer', 'Buffer')
 local source = device.source
 local buffer = device.buffer
 
-local module, voice
+local module, voice, visualizer
 
 local tickPeriod, samplingPeriod, midiPPQ, actualTempo
 local timeSigNumer, timeSigDenom
@@ -505,6 +505,7 @@ routine.load = function(mod)
 
 	interpolation = 'nearest'
 	smoothScrolling = true
+	visualizer = {}
 
 	positionJump, patternBreak, patternDelay = false, false, 0
 	glissando, globalVolume = false, module.globalVolume
@@ -523,6 +524,13 @@ routine.load = function(mod)
 	for ch=0, 31 do --module.channelCount-1 do
 		if module.channel[ch].map then
 			voice[module.channel[ch].map] = Voice.new(module.channel[ch].pan)
+			-- Per-voice waveform analyzers.
+			visualizer[module.channel[ch].map] = {}
+			visualizer[module.channel[ch].map].offset = 0
+			visualizer[module.channel[ch].map].length = 104 -- width of a track
+			for smp = 0, visualizer[module.channel[ch].map].length-1 do 
+				visualizer[module.channel[ch].map][smp] = 0.0
+			end
 		end
 		--voice[ch] = Voice.new(module.channel[ch].pan)
 	end
@@ -757,6 +765,10 @@ routine.render = function(dt)
 			if not voice[v].muted then
 				L, R = voice[v]:render()
 				smpL, smpR = smpL + L, smpR + R
+				-- Visualizer stuff
+				visualizer[v][visualizer[v].offset] = (L+R)/2
+				visualizer[v].offset = (visualizer[v].offset + 1) %
+					visualizer[v].length
 			end
 		end
 
@@ -921,6 +933,29 @@ routine.draw = function()
 	love.graphics.draw(textCP, 0, 0)
 	love.graphics.draw(textNP, 0, 0)
 
+	love.graphics.pop()
+
+	-- Visualizer
+	love.graphics.push()
+	love.graphics.setLineStyle('rough')
+	love.graphics.translate(3*8,384)
+	for ch = 0, module.channelCount-1 do
+		love.graphics.setColor(.4,.4,.4)
+		love.graphics.setBlendMode('multiply','premultiplied')
+		love.graphics.rectangle('fill',0,-128,104,128)
+		love.graphics.setBlendMode('alpha')
+		love.graphics.setColor(.4,.4,.3)
+		for smp = 0, visualizer[ch].length-2 do
+			love.graphics.line(
+				smp,   math.floor(visualizer[ch][smp  ]*256)-64,
+				smp+1, math.floor(visualizer[ch][smp+1]*256)-64)
+		end
+		love.graphics.setColor(1,1,1)
+		for smp = 0, visualizer[ch].length-1 do
+			love.graphics.points(smp, math.floor(visualizer[ch][smp]*256)-64)
+		end
+		love.graphics.translate(104+8,0)
+	end
 	love.graphics.pop()
 
 	-- Stats
