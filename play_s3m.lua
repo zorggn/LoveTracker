@@ -154,8 +154,10 @@ Voice.getStatistics = function(v)
 		v.fxSlotGeneric, v.fxSlotPortamento, v.fxSlotVibrato,
 		loopRow[v.ch], loopCnt[v.ch],
 		v.noteDelayTicks, v.noteCutTicks,
-		v.arpIndex, v.arpOffset1, v.arpOffset2,
-		v.tremorIndex, v.tremorOnTicks, v.tremorOffTicks
+		v.arpIndex,
+		v.tremorOffset, v.tremorOnTicks, v.tremorOffTicks,
+		v.vibratoWaveform, v.vibratoOffset,
+		v.tremoloWaveform, v.tremoloOffset
 end
 
 Voice.setNote = function(v, note)
@@ -299,6 +301,8 @@ Voice.process = function(v, currentTick)
 				-- Do nothing here.
 			end
 		end
+
+		if N then v.lastNote = N end
 	end
 
 	if currentTick == 0 then
@@ -368,10 +372,56 @@ Voice.process = function(v, currentTick)
 				v.glisPeriod = NOTEPERIOD[N] *
 					(DEFAULTC4SPEED / v.instrument.c4speed)
 			end
+		elseif C == 'H' then
+			-- Vibrato
+			local x = math.floor(D / 0x10)
+			local y =            D % 0x10
+			-- TODO: Some modules imply that the two param parts are set
+			-- separately.
+			if x > 0x0 then
+				v.fxSlotVibrato = (x * 0x10) + (v.fxSlotVibrato % 0x10)
+			end
+			if y > 0x0 then
+				v.fxSlotVibrato = math.floor(v.fxSlotVibrato / 0x10) * 0x10 + y
+			end
+			-- If wavecontrol is retriggering, then reset offset here.
+			if v.vibratoWaveform < 4 then
+				v.vibratoOffset = 32
+			end
+		elseif C == 'I' then
+			-- Tremor
+			if D > 0x00 then
+				v.fxSlotGeneric  = D
+				v.tremorOnTicks  = math.floor(v.fxSlotGeneric / 0x10)
+				v.tremorOffTicks =            v.fxSlotGeneric % 0x10
+			end
+			local x, y = v.tremorOnTicks+1, v.tremorOffTicks+1
+			v.tremorOffset = v.tremorOffset % (x + y) -- sum is 32 maximum
+			if v.tremorOffset < x then
+				v.currVolume = 0
+			else
+				v.currVolume = V
+			end
+		elseif C == 'J' then
+			-- Arpeggio
+			if D > 0x00 then
+				v.fxSlotGeneric = D
+				v.arpOffset[1] = math.floor(v.fxSlotGeneric / 0x10)
+				v.arpOffset[2] =            v.fxSlotGeneric % 0x10
+			end
 		elseif C == 'O' then
 			-- Set Offset
 			v.fxSlotGeneric = D
 			v.setOffset     = D * 0x100
+		elseif C == 'R' then
+			-- Tremolo
+			if D > 0x00 then
+				v.fxSlotGeneric = D -- TODO: Test this.
+			end
+			-- If wavecontrol is retriggering, then reset offset here.
+			if v.tremoloWaveform < 4 then
+				v.tremoloOffset = 32
+			end
 		end
 	else 
 		-- Tn Effects.
@@ -411,7 +461,58 @@ Voice.process = function(v, currentTick)
 					end
 				end
 			else
-				-- TODO: Implement semitone-glissando.
+				-- TODO: Check if semitone-glissando implementation is correct.
+				if v.instPeriod > v.glisPeriod then
+					local p = math.max(PERIODBINSEARCH(v.glisPeriod)-1, 0)
+					v.instPeriod = NOTEPERIOD[p]
+						* (DEFAULTC4SPEED / v.instrument.c4speed)
+				elseif v.instPeriod < v.glisPeriod then
+					local p = math.min(PERIODBINSEARCH(v.glisPeriod)+1, 131)
+					v.instPeriod = NOTEPERIOD[p]
+						* (DEFAULTC4SPEED / v.instrument.c4speed)
+				end
+			end
+		elseif C == 'H' then
+			-- Vibrato
+			local pos = math.abs(v.vibratoOffset)
+			local wf = v.vibratoWaveform % 4
+			local speed = math.floor(v.fxSlotVibrato / 0x10)
+			local depth = v.fxSlotVibrato % 0x10
+			local delta = WAVEFORMTABLE[wf][pos % 32] * depth / 32
+			--delta = delta / 128 -- These two steps are the /32 above.
+			--delta = delta * 4 -- For fine vibrato is the unmultiplied one
+			if pos < 32 then
+				v.vibratoFreqDelta =  delta
+			else
+				v.vibratoFreqDelta = -delta
+			end
+			v.vibratoOffset = (v.vibratoOffset + speed) % 64
+		elseif C == 'I' then
+			-- Tremor
+			local x, y = v.tremorOnTicks+1, v.tremorOffTicks+1
+			v.tremorOffset = v.tremorOffset % (x + y) -- sum is 32 maximum
+			if v.tremorOffset < x then
+				v.currVolume = 0
+			else
+				v.currVolume = V
+			end
+		elseif C == 'J' then
+			-- Arpeggio
+			v.arpIndex = currentTick % 3
+			v:setPeriod(math.min(v.lastNote + v.arpOffset[v.arpIndex], 131))
+		elseif C == 'R' then
+			-- Tremolo
+			local pos = math.abs(v.tremoloOffset)
+			local wf = v.tremoloWaveform % 4
+			local speed = math.floor(v.fxSlotGeneric / 0x10)
+			local depth = v.fxSlotGeneric % 0x10
+			local delta = WAVEFORMTABLE[wf][pos % 32] * depth / 16
+			-- Similarly to vibrato, but here, the formula would have been
+			-- delta / 64 (* 4) instead.
+			if pos < 32 then
+				v.currVolume = math.min(v.currVolume + (delta / 0x40), 1) 
+			else
+				v.currVolume = math.max(v.currVolume - (delta / 0x40), 1)
 			end
 		end
 	end
@@ -425,7 +526,15 @@ Voice.render = function(v)
 
 	if v.instrument.type == 1 then
 		-- Sampler.
-		v.currOffset = v.currOffset + (FIXEDCLOCK / v.instPeriod)
+		local freq
+
+		if v.fxCommand == 0x08 then -- vibrato
+			freq = v.instPeriod + v.vibratoFreqDelta
+		else
+			freq = v.instPeriod
+		end
+
+		v.currOffset = v.currOffset + (FIXEDCLOCK / freq)
 
 		if v.setOffset > 0 then
 			-- Add setOffset parameter.
@@ -498,6 +607,8 @@ Voice.new = function(ch, pan)
 	v.instrument       = false  -- Reference to the current instrument.
 
 	-- Current running values
+	v.lastNote         = 0
+
 	v.notePeriod       = 0x0000 -- Base period value as taken from note data.
 	v.glisPeriod       = 0x0000 -- Final (true) period value of Gxx glissando effects.
 	v.instPeriod       = 0x0000 -- True period value calc.-ed w/ the current instrument.
@@ -515,17 +626,19 @@ Voice.new = function(ch, pan)
 
 	v.fxSlotGeneric    = 0x00   -- Generic effect parameter slot.
 	v.fxSlotPortamento = 0x00   -- Portamento effect parameter slot. (E/F/G)
-	v.fxSlotVibrato    = 0x00   -- Vibrato effect parameter slot. (H)
+	v.fxSlotVibrato    = 0x00   -- Vibrato effect parameter slot. (H/U)
 
 	-- Faster calculation
 	v.noteDelayTicks   = 0x0    -- Ticks to delay note onsets.
 	v.noteCutTicks     = 0x0    -- Ticks to cut note sound after.
 
 	v.arpIndex         = 0x0    -- Running index for arpeggio effect.
-	v.arpOffset1       = 0x0    -- Arpeggio offsets.
-	v.arpOffset2       = 0x0    -- -"-.
+	v.arpOffset        = {}
+	v.arpOffset[0]     = 0x0    -- Arpeggio offsets.
+	v.arpOffset[1]     = 0x0    -- -"-.
+	v.arpOffset[2]     = 0x0    -- -"-.
 
-	v.tremorIndex      = 0x00   -- Running index for tremor effect.
+	v.tremorOffset     = 0x00   -- Running index for tremor effect.
 	v.tremorOnTicks    = 0x0    -- Ticks while sound is unmuted.
 	v.tremorOffTicks   = 0x0    -- Ticks while sound is muted.
 
@@ -1030,7 +1143,7 @@ routine.draw = function()
 	-- Stats
 	love.graphics.push()
 	love.graphics.setColor(0,0,0.3)
-	love.graphics.rectangle('fill',0,0,73*8,60)
+	love.graphics.rectangle('fill',0,0,80*8,60)
 	love.graphics.setColor(1,1,1)
 	love.graphics.translate(0,-2)
 	local i,f
@@ -1082,15 +1195,18 @@ routine.draw = function()
 	love.graphics.push()
 	love.graphics.translate(74*8, 0)
 	love.graphics.setColor(0,0,0.25)
-	love.graphics.rectangle('fill',0,0,107*8,(module.channelCount+1)*12)
+	love.graphics.rectangle('fill',0,0,118*8,(module.channelCount+1)*12)
 	love.graphics.setColor(1,1,1)
 	love.graphics.translate(0,-2)
 	love.graphics.print(
-		"Ch | Nx Ix Vx Cx Dx | nPer gPer iPer cOfs smpL smpS smpE Cspd T L H S | cI cV cP | FX Fg Fp Fv | Loop | DC A12 T+-",
+		"Ch | Nx Ix Vx Cx Dx | nPer gPer iPer cOfs smpL smpS smpE Cspd T L H S | cI cV cP | FX Fg Fp Fv | Loop DCA T+- ~V# ~T#",
 		0, 0)
 	for ch = 0, module.channelCount-1 do
 		love.graphics.print((
-			"%02X | %02X %02X %02X %02X %02X | %04X %04X %04X %04X %04X %04X %04X %04X %1X %1X %1X %1X | %02X %02X %02X | %02X %02X %02X %02X | %02X %1X | %02X %1X%1X%1X %1X%1X%1X"
+			"%02X | %02X %02X %02X %02X %02X | "..
+			"%04X %04X %04X %04X %04X %04X %04X %04X %1X %1X %1X %1X | "..
+			"%02X %02X %02X | %02X %02X %02X %02X | "..
+			"%02X %1X %1X%1X%1X %1X%1X%1X %1X%02X %1X%02X"
 			):format(ch, voice[ch]:getStatistics()), 0, (ch+1)*12)
 	end
 	love.graphics.pop()
