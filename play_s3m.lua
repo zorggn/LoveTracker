@@ -38,6 +38,34 @@ local positionJump, patternBreak, patternDelay, glissando, globalVolume
 
 local ARPEGGIOPERIOD = 1 / 50 -- Hz; ST3's arp isn't tied to the speed...
 
+local SINETABLE = {
+	[0] =   0,  24,  49,  74,  97, 120, 141, 161,
+	      180, 197, 212, 224, 235, 244, 250, 253,
+	      255, 253, 250, 244, 235, 224, 212, 197,
+	      180, 161, 141, 120,  97,  74,  49,  24}
+
+local RAMPDOWNTABLE = {
+	[0] =   0,   8,  16,  24,  32,  40,  48,  56,
+	       64,  72,  80,  88,  96, 104, 112, 120,
+	      128, 136, 144, 152, 160, 168, 176, 184,
+	      192, 200, 208, 216, 224, 232, 240, 248}
+
+local SQUARETABLE = {
+	[0] = 255, 255, 255, 255, 255, 255, 255, 255,
+	      255, 255, 255, 255, 255, 255, 255, 255,
+	      255, 255, 255, 255, 255, 255, 255, 255,
+	      255, 255, 255, 255, 255, 255, 255, 255}
+
+local RANDOMTABLE = {}
+	-- This is probably not how the random waveform is implemented...
+	-- probably means to select one of the above 3 randomly...
+	-- TODO: Figure it out.
+	for i = 0, 31 do RANDOMTABLE[i] = love.math.random(0, 255) end
+
+local WAVEFORMTABLE = {
+	[0] = SINETABLE, RAMPDOWNTABLE, SQUARETABLE, RANDOMTABLE,
+	      SINETABLE, RAMPDOWNTABLE, SQUARETABLE, RANDOMTABLE}
+
 local C4SPEEDFINETUNES = {
 	[ 0x00 ] = 7895, -- -8
 	[ 0x01 ] = 7941,
