@@ -225,16 +225,16 @@ local load_s3m = function(file)
 	v, n = file:read(1); if n ~= 1 then return false, errorString[2] end
 	structure.initialSpeed = util.bin2num(v)
 	log("Initial speed:  0x%02X", structure.initialSpeed)
-	if structure.initialSpeed > 0x1F then -- TODO: Get value limits!
-		log(" (larger than the maximum of 31)")
+	if structure.initialSpeed >= 0x1F then -- TODO: Get value limits!
+		log(" (larger than the maximum of 32)")
 	end
 	log("\n")
 
 	v, n = file:read(1); if n ~= 1 then return false, errorString[2] end
 	structure.initialTempo = util.bin2num(v)
 	log("Initial tempo:  0x%02X", structure.initialTempo)
-	if structure.initialTempo < 0x20 then -- TODO: Get value limits!
-		log(" (smaller than the minimum of 32)")
+	if structure.initialTempo <= 0x20 then
+		log(" (smaller than the minimum of 33)")
 	end
 	log("\n")
 
@@ -604,6 +604,8 @@ local load_s3m = function(file)
 			-- if n ~= 4 then return false, errorString[9] end
 			-- if v ~= 'SCRI' then return false, errorString[13] end
 		end
+		-- The SSG Drums aren't implemented in ST3 either.
+		-- Neither are the second set of 9 FM OPs.
 		log("\n")
 		structure.sample[smp] = sample
 	end
