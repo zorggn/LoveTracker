@@ -31,7 +31,6 @@ local smoothScrolling
 local speed, tempo
 local loopRow, loopCnt, patternLoop, filterSet
 local positionJump, patternBreak, patternDelay, glissando, globalVolume
-local vibratoWaveform, tremoloWaveform
 
 -- Constants
 
@@ -502,6 +501,12 @@ Voice.new = function(ch, pan)
 	v.tremorOnTicks    = 0x0    -- Ticks while sound is unmuted.
 	v.tremorOffTicks   = 0x0    -- Ticks while sound is muted.
 
+	v.vibratoWaveform  = 0
+	v.tremoloWaveform  = 0
+	v.vibratoOffset    = 32   -- 0..63
+	v.tremoloOffset    = 32
+	v.vibratoFreqDelta = 0
+
 	v.setOffset        = 0x0000 -- Oxx setOffset calculated value.
 
 
@@ -534,7 +539,6 @@ routine.load = function(mod)
 
 	positionJump, patternBreak, patternDelay = false, false, 0
 	glissando, globalVolume = false, module.globalVolume
-	vibratoWaveform, tremoloWaveform = 0, 0 -- Sine by default
 
 	timeSigNumer, timeSigDenom = 4, 4
 	speed = module.initialSpeed
