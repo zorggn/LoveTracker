@@ -1192,6 +1192,116 @@ routine.draw = function()
 	love.graphics.print(("Tracking: %s"):format(device.trackingMode), 48*8, y)
 	love.graphics.pop()
 
+	-- NEC98/OPNA player-esque Piano Keyboard
+	local White = {[0] = true, [2] = true, [4] = true, [5] = true, [7]  = true, [9] = true, [11] = true}
+	local Black = {[1] = true, [3] = true, [6] = true, [8] = true, [10] = true}
+	local X = {[0] =  0,  3,  4,  7,  8, 12, 15, 16, 19, 20, 23, 24}
+	local W = {[0] =  4,  2,  4,  2,  4,  4,  2,  4,  2,  4,  2,  4}
+	local H = {[0] = 12,  7, 12,  7, 12, 12,  7, 12,  7, 12,  7, 12}
+
+	local gX = {[0] =   3,  7, 11, 15, 19, 23, 27}
+	local gY = {[0] =   7,  7,  1,  7,  7,  7,  1}
+	local gH = {[0] =   5,  5, 11,  5,  5,  5, 11}
+	love.graphics.push()
+	love.graphics.translate(189*8, 0)
+	love.graphics.translate(0, (module.channelCount+2)*12)
+	--love.graphics.translate(200, 486)
+	--love.graphics.scale(2,2)
+
+	for ch = 0, module.channelCount-1 do
+		love.graphics.setColor(1,1,1)
+		love.graphics.rectangle('fill',0,0,10*28,12)
+
+		-- N = math.floor(v.n / 0x10) * 12 + (v.n % 0x10)
+		local octave = math.floor(voice[ch].n / 16)
+		local class  =            voice[ch].n % 16
+
+		local EX = false
+		local pitch, poffset
+		local octave2
+		local class2
+		local pitchex, octave2ex, class2ex
+		local exalpha, volnorm
+
+		if voice[ch].instPeriod > 0 and voice[ch].instPeriod < 27392 then
+			EX = true
+			pitch, poffset = PERIODBINSEARCH(voice[ch].instPeriod)
+			octave2 = math.floor(pitch / 12)
+			class2  =            pitch % 12
+			pitchex, octave2ex, class2ex = pitch,0,0
+			--if poffset > 0 then
+			--	pitchex   = pitch+1
+			--	octave2ex = math.floor(pitchex / 12)
+			--	class2ex  =            pitchex % 12
+			--end
+			exalpha   = poffset
+			volnorm = voice[ch].currVolume ^ (1/32)
+		end
+
+		if White[class] then
+			love.graphics.setColor(0,0,1)
+			love.graphics.rectangle('fill', octave*28+X[class], 0,
+				W[class], H[class])
+		end
+
+		if EX and White[class2] then
+			love.graphics.setColor(1,0,0, volnorm)
+			love.graphics.rectangle('fill', octave2*28+X[class2], 0,
+				W[class2], H[class2])
+		end
+
+		--if EX and poffset > 0 then
+		--	if White[class2ex] then
+		--		love.graphics.setColor(1,0,0,(exalpha)*volnorm)
+		--		love.graphics.rectangle('fill', octave2ex*28+X[class2ex], 0,
+		--			W[class2ex], H[class2ex])
+		--	end
+		--end
+
+		for o = 0, 9 do
+			for c = 0, 11 do
+				if Black[c] then
+					love.graphics.setColor(0,0,0)
+					love.graphics.rectangle('fill', o*28+X[c], 0,
+						W[c], H[c])
+
+					if o == octave and c == class then
+						love.graphics.setColor(0,0,1)
+						love.graphics.rectangle('fill', o*28+X[c], 0,
+							W[c], H[c])
+					end
+
+					if EX and o == octave2 and c == class2 then
+						love.graphics.setColor(1,0,0,volnorm)
+						love.graphics.rectangle('fill', o*28+X[c], 0,
+							W[c], H[c])
+					end
+
+					--if EX and poffset > 0 then
+					--	if o == octave2ex and c == class2ex then
+					--		love.graphics.setColor(1,0,0,(exalpha)*volnorm)
+					--		love.graphics.rectangle('fill', o*28+X[c], 0,
+					--			W[c], H[c])
+					--	end
+					--end
+					
+				end
+			end
+
+			love.graphics.setColor(.5, .5, .5)
+			for g = 0, 6 do
+				love.graphics.rectangle('fill', o*28+gX[g], gY[g],
+					1, gH[g])
+			end
+		end
+
+		love.graphics.setColor(.5, .5, .5)
+		love.graphics.rectangle('fill',0,0,10*28,1)
+
+		love.graphics.translate(0, 12)
+	end		
+	love.graphics.pop()
+
 	-- Matrix
 	love.graphics.push()
 	love.graphics.translate(74*8, 0)
