@@ -98,7 +98,7 @@ Voice.getStatistics = function(v)
 		H    = v.instrument.bitDepth == 16 and 1 or 0
 		S    = v.instrument.channelCount == 2 and 1 or 0
 	end
-	return v.n or 0, v.i or 0, v.v or 0, v.c or 0, v.d or 0,
+	return v.n or 0xFF, v.i or 0, v.v or 0, v.c or 0, v.d or 0,
 		v.notePeriod, v.glisPeriod, v.instPeriod,
 		v.currOffset, smpL, smpS, smpE, Cspd, T, L, H, S,
 		v.currInstrument, v.currVolume*0x40, v.currPanning*0xF, v.fxCommand,
@@ -158,7 +158,7 @@ Voice.process = function(v, currentTick)
 		end
 	else
 		-- No note
-		v.n = 0
+		v.n = 0xFF
 		N   = false
 	end
 
@@ -443,7 +443,7 @@ Voice.new = function(ch, pan)
 	v.muted    = false -- Whether or not the voice output is muted.
 
 	-- Per-row input data.
-	v.n,  v.i,  v.v,  v.c,  v.d  = 0x00, 0x00, 0x00, 0x00, 0x00
+	v.n,  v.i,  v.v,  v.c,  v.d  = 0xFF, 0x00, 0x00, 0x00, 0x00
 
 	-- Reference to the instrument
 	v.instrument       = false  -- Reference to the current instrument.
