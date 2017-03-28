@@ -514,6 +514,7 @@ Voice.process = function(v, currentTick)
 			else
 				v.currVolume = math.max(v.currVolume - (delta / 0x40), 1)
 			end
+			v.tremoloOffset = (v.tremoloOffset + speed) % 64
 		end
 	end
 end
