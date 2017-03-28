@@ -82,6 +82,28 @@ local FIXTIMING = function(tempo, speed, tsn, tsd)
 	return tick, ppq, tempo
 end
 
+local PERIODBINSEARCH = function(p)
+	-- Start from the middle and always halve the remaining area
+	-- We can assume that the given parameter will have a value between
+	-- 27392 and 0 (or it'll just return those as the "closest" ones.)
+	-- Note that the order of values is reversed (from highest to lowest)
+	local L, R = 0, 132-1
+	local m
+	while L <= R do
+		m = math.floor((L + R) / 2.0)
+		if     NOTEPERIOD[m] > p then
+			L = m + 1
+		elseif NOTEPERIOD[m] < p then
+			R = m - 1
+		else 
+			return m, 0
+		end
+	end
+	if not NOTEPERIOD[L-1] then return 0,   0 end
+	if not NOTEPERIOD[L]   then return L-1, 0 end
+	return L-1, (p-NOTEPERIOD[L-1])/(NOTEPERIOD[L]-NOTEPERIOD[L-1])
+end
+
 -- Voice objects
 
 local Voice = {}
