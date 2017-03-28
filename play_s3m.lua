@@ -183,7 +183,7 @@ Voice.setPeriod = function(v, pitch)
 		return
 	end
 	v.notePeriod = NOTEPERIOD[pitch]
-	if v.instrument then
+	if v.instrument and v.instrument.c4speed then
 		v.instPeriod = v.notePeriod * (DEFAULTC4SPEED / v.instrument.c4speed)
 	end
 end
@@ -264,7 +264,7 @@ Voice.process = function(v, currentTick)
 			if V then
 				v.currVolume = V / 0x40
 			else
-				if v.instrument then
+				if v.instrument and v.instrument.volume then
 					v.currVolume = v.instrument.volume / 0x40
 				end
 			end
@@ -343,7 +343,7 @@ Voice.process = function(v, currentTick)
 				-- Extra fine porta
 				v.instPeriod = v.instPeriod + y
 			end
-			-- TODO: Period Clamping...
+			v.instPeriod = math.min(v.instPeriod, 27392)
 		elseif C == 'F' then
 			-- Portamento Up
 			if D > 0x00 then
@@ -358,7 +358,7 @@ Voice.process = function(v, currentTick)
 				-- Extra fine porta
 				v.instPeriod = v.instPeriod - y
 			end
-			-- TODO: Period Clamping...
+			v.instPeriod = math.max(v.instPeriod, 0)
 		elseif C == 'G' then
 			-- Tone portamento
 			if D > 0x00 then
@@ -390,13 +390,13 @@ Voice.process = function(v, currentTick)
 			if x < 0xE then
 				v.instPeriod = v.instPeriod + v.fxSlotPortamento * 4
 			end
-			-- TODO: Period Clamping...
+			v.instPeriod = math.min(v.instPeriod, 27392)
 		elseif C == 'F' then
 			local x = math.floor(v.fxSlotPortamento / 0x10)
 			if x < 0xE then
 				v.instPeriod = v.instPeriod - v.fxSlotPortamento * 4
 			end
-			-- TODO: Period Clamping...
+			v.instPeriod = math.max(v.instPeriod, 0)
 		elseif C == 'G' then
 			if not glissando then
 				if     v.instPeriod > v.glisPeriod then
