@@ -1,7 +1,6 @@
 -- Scream Tracker 3 "S3M" playroutine
 -- by zorg @ 2017 § ISC
 
-
 -- Note: To keep things compact, everything not generic enough to be used by
 --       other playroutines are kept inside the respective play_*.lua files,
 --       a.k.a. these ones.
