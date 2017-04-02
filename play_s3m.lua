@@ -523,6 +523,7 @@ Voice.render = function(v)
 	local smpL, smpR = 0.0, 0.0
 
 	if v.instPeriod == 0 then return smpL, smpR end
+
 	if not v.instrument or v.instrument.type == 0 then return smpL, smpR end
 
 	if v.instrument.type == 1 then
@@ -572,6 +573,7 @@ Voice.render = function(v)
 				-- Stereo is not standard ST3, but implementable.
 				local p = math.floor(v.currOffset)
 				p = p % 2 == 1 and p - 1 or p
+
 				smpL = v.instrument.data:getSample(p)
 				smpR = v.instrument.data:getSample(p + 1)
 			end
@@ -1018,6 +1020,7 @@ local textCP, textPP, textNP
 textCP = love.graphics.newText(love.graphics.getFont())
 textPP = love.graphics.newText(love.graphics.getFont())
 textNP = love.graphics.newText(love.graphics.getFont())
+
 routine.draw = function()
 	love.graphics.setBackgroundColor(0.1,0.2,0.4)
 
