@@ -1025,6 +1025,7 @@ routine.draw = function()
 	love.graphics.setBackgroundColor(0.1,0.2,0.4)
 
 	-- Patterns
+	---[=[
 	love.graphics.push()
 	love.graphics.translate(0, 300+(-12*currentRow))
 
@@ -1045,6 +1046,8 @@ routine.draw = function()
 	-- 227*8 == 1816 horizontal width would be needed to show 16 s3m channels.
 
 	for row = 0, 63 do
+
+		---[==[
 		if prev then
 			color = {0.5,0.5,0.25}
 			textPP:add({color, ("%02X"):format(row)},
@@ -1066,7 +1069,9 @@ routine.draw = function()
 			textPP:add({color, "|"},
 				2*8+module.channelCount*14*8, 84+(row-64)*12+subOffset)
 		end
+		--]==]
 
+		---[==[
 		if curr then
 			if row ~= currentRow then
 				color = {0.75,0.75,0.75}
@@ -1076,6 +1081,7 @@ routine.draw = function()
 				color = {0.75,0.75,0.25}
 			end
 			textCP:add({color, ("%02X"):format(row)}, 0, 84+row*12+subOffset)
+			--love.graphics.print(("%02X"):format(row), 0, 84+row*12+subOffset)
 			for ch = 0, module.channelCount-1 do
 				textCP:add({color, ("|%3s %2s %2s %1s%2s"):format(
 					curr[row][ch].note and noteTf(curr[row][ch].note) or '...',
@@ -1084,10 +1090,21 @@ routine.draw = function()
 					curr[row][ch].effectCommand and string.char(string.byte('A') + curr[row][ch].effectCommand - 1) or '.',
 					curr[row][ch].effectData and ("%02X"):format(curr[row][ch].effectData) or '..')},
 					2*8+ch*14*8, 84+row*12+subOffset)
+				--love.graphics.print(
+				--	("|%3s %2s %2s %1s%2s"):format(
+				--		curr[row][ch].note and noteTf(curr[row][ch].note) or '...',
+				--		curr[row][ch].instrument and ("%02X"):format(curr[row][ch].instrument) or '..',
+				--		curr[row][ch].volume and ("%02X"):format(curr[row][ch].volume) or '..',
+				--		curr[row][ch].effectCommand and string.char(string.byte('A') + curr[row][ch].effectCommand - 1) or '.',
+				--		curr[row][ch].effectData and ("%02X"):format(curr[row][ch].effectData) or '..')
+				--	,2*8+ch*14*8, 84+row*12+subOffset)
 			end
 			textCP:add({color, "|"}, 2*8+module.channelCount*14*8, 84+row*12+subOffset)
+			--love.graphics.print('|', 2*8+module.channelCount*14*8, 84+row*12+subOffset)
 		end
+		--]==]
 
+		---[==[
 		if next then
 			color = {0.5,0.25,0.75}
 			textNP:add({color, ("%02X"):format(row)}, 0, 84+(row+64)*12+subOffset)
@@ -1102,6 +1119,7 @@ routine.draw = function()
 			end
 			textNP:add({color, "|"}, 2*8+module.channelCount*14*8, 84+(row+64)*12+subOffset)
 		end
+		--]==]
 	end
 
 	love.graphics.draw(textPP, 0, 0)
@@ -1109,8 +1127,10 @@ routine.draw = function()
 	love.graphics.draw(textNP, 0, 0)
 
 	love.graphics.pop()
+	--]=]
 
 	-- Visualizer
+	---[=[
 	love.graphics.push()
 	love.graphics.setLineStyle('rough')
 	love.graphics.setLineWidth(1)
@@ -1142,8 +1162,10 @@ routine.draw = function()
 		love.graphics.translate(104+8,0)
 	end
 	love.graphics.pop()
+	--]=]
 
 	-- Stats
+	---[=[
 	love.graphics.push()
 	love.graphics.setColor(0,0,0.3)
 	love.graphics.rectangle('fill',0,0,80*8,60)
@@ -1205,10 +1227,10 @@ routine.draw = function()
 	local gY = {[0] =   7,  7,  1,  7,  7,  7,  1}
 	local gH = {[0] =   5,  5, 11,  5,  5,  5, 11}
 	love.graphics.push()
-	love.graphics.translate(189*8, 0)
-	love.graphics.translate(0, (module.channelCount+2)*12)
-	--love.graphics.translate(200, 486)
-	--love.graphics.scale(2,2)
+	--love.graphics.translate(189*8, 0)
+	--love.graphics.translate(0, (module.channelCount+2)*12)
+	love.graphics.translate(680, 432)
+	love.graphics.scale(4,4)
 
 	for ch = 0, module.channelCount-1 do
 		love.graphics.setColor(1,1,1)
@@ -1303,8 +1325,10 @@ routine.draw = function()
 		love.graphics.translate(0, 12)
 	end		
 	love.graphics.pop()
+	--]=]
 
 	-- Matrix
+	---[=[
 	love.graphics.push()
 	love.graphics.translate(74*8, 0)
 	love.graphics.setColor(0,0,0.25)
