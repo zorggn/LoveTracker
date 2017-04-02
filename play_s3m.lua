@@ -1215,8 +1215,10 @@ routine.draw = function()
 	y = y + w
 	love.graphics.print(("Tracking: %s"):format(device.trackingMode), 48*8, y)
 	love.graphics.pop()
+	--]=]
 
 	-- NEC98/OPNA player-esque Piano Keyboard
+	---[=[
 	local White = {[0] = true, [2] = true, [4] = true, [5] = true, [7]  = true, [9] = true, [11] = true}
 	local Black = {[1] = true, [3] = true, [6] = true, [8] = true, [10] = true}
 	local X = {[0] =  0,  3,  4,  7,  8, 12, 15, 16, 19, 20, 23, 24}
@@ -1347,6 +1349,8 @@ routine.draw = function()
 			):format(ch, voice[ch]:getStatistics()), 0, (ch+1)*12)
 	end
 	love.graphics.pop()
+	--]=]
+
 end
 
 --------------
