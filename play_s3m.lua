@@ -575,9 +575,8 @@ Voice.render = function(v)
 				smpL = v.instrument.data:getSample(p)
 				smpR = v.instrument.data:getSample(p + 1)
 			end
-		elseif v.instrument.type == 2 then
-			-- TODO: AdLib OPL2 synth.
-
+		elseif interpolation == 'linear' then
+			-- TODO
 		end
 
 		smpL = smpL * v.currVolume * (1.0 - v.currPanning)
@@ -585,7 +584,7 @@ Voice.render = function(v)
 		return smpL, smpR
 
 	elseif v.instrument.type == 2 then
-		-- TODO: AdLib melodics.
+		-- TODO: AdLib OPL2 synth - melodics.
 		return smpL, smpR
 	end
 end
