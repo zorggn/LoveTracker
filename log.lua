@@ -2,7 +2,7 @@
 -- by zorg @ 2017 § ISC
 
 local log = {}
-log.enabled = true
+log.enabled = false
 log.func = function(self, str, ...)
 	if self.enabled then
 		io.write(string.format(str,...))
