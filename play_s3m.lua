@@ -529,7 +529,7 @@ Voice.render = function(v)
 		-- Sampler.
 		local freq
 
-		if v.fxCommand == 0x08 then -- vibrato
+		if v.c == 0x08 then -- vibrato
 			freq = v.instPeriod + v.vibratoFreqDelta
 		else
 			freq = v.instPeriod
