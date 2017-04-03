@@ -455,6 +455,22 @@ Voice.process = function(v, currentTick)
 			if v.tremoloWaveform < 4 then
 				v.tremoloOffset = 32
 			end
+		elseif C == 'U' then
+			-- Fine Vibrato
+			local x = math.floor(D / 0x10)
+			local y =            D % 0x10
+			-- TODO: Some modules imply that the two param parts are set
+			-- separately.
+			if x > 0x0 then
+				v.fxSlotVibrato = (x * 0x10) + (v.fxSlotVibrato % 0x10)
+			end
+			if y > 0x0 then
+				v.fxSlotVibrato = math.floor(v.fxSlotVibrato / 0x10) * 0x10 + y
+			end
+			-- If wavecontrol is retriggering, then reset offset here.
+			if v.vibratoWaveform < 4 then
+				v.vibratoOffset = 32
+			end
 		end
 	else 
 		-- Tn Effects.
@@ -624,6 +640,21 @@ Voice.process = function(v, currentTick)
 				v.currVolume = math.max(v.currVolume - (delta / 0x40), 1)
 			end
 			v.tremoloOffset = (v.tremoloOffset + speed) % 64
+		elseif C == 'U' then
+			-- Fine Vibrato
+			local pos = math.abs(v.vibratoOffset)
+			local wf = v.vibratoWaveform % 4
+			local speed = math.floor(v.fxSlotVibrato / 0x10)
+			local depth = v.fxSlotVibrato % 0x10
+			local delta = WAVEFORMTABLE[wf][pos % 32] * depth / 128
+			--delta = delta / 128 -- These two steps are the /32 above.
+			--delta = delta * 4 -- For fine vibrato is the unmultiplied one
+			if pos < 32 then
+				v.vibratoFreqDelta =  delta
+			else
+				v.vibratoFreqDelta = -delta
+			end
+			v.vibratoOffset = (v.vibratoOffset + speed) % 64
 		end
 	end
 end
