@@ -65,6 +65,25 @@ local WAVEFORMTABLE = {
 	[0] = SINETABLE, RAMPDOWNTABLE, SQUARETABLE, RANDOMTABLE,
 	      SINETABLE, RAMPDOWNTABLE, SQUARETABLE, RANDOMTABLE}
 
+local RETRIGVOLSLIDEFUNC = {
+	  [0] = function(v) return v end,
+	--[[1]] function(v) return v -  1 end,
+	--[[2]] function(v) return v -  2 end,
+	--[[3]] function(v) return v -  4 end,
+	--[[4]] function(v) return v -  8 end,
+	--[[5]] function(v) return v - 16 end,
+	--[[6]] function(v) return v * (2/3) end,
+	--[[7]] function(v) return v * (1/2) end,
+	--[[8]] function(v) return v end,
+	--[[9]] function(v) return v +  1 end,
+	--[[A]] function(v) return v +  2 end,
+	--[[B]] function(v) return v +  4 end,
+	--[[C]] function(v) return v +  8 end,
+	--[[D]] function(v) return v + 16 end,
+	--[[E]] function(v) return v * (3/2) end,
+	--[[F]] function(v) return v * (2/1) end,
+}
+
 local C4SPEEDFINETUNES = {
 	[ 0x00 ] = 7895, -- -8
 	[ 0x01 ] = 7941,
@@ -412,6 +431,11 @@ Voice.process = function(v, currentTick)
 			-- Set Offset
 			v.fxSlotGeneric = D
 			v.setOffset     = D * 0x100
+		elseif C == 'Q' then
+			-- Retrigger note (+VolSlide)
+			if D > 0x00 then
+				v.fxSlotGeneric = D
+			end
 		elseif C == 'R' then
 			-- Tremolo
 			if D > 0x00 then
@@ -499,6 +523,21 @@ Voice.process = function(v, currentTick)
 			-- Arpeggio
 			v.arpIndex = currentTick % 3
 			v:setPeriod(math.min(v.lastNote + v.arpOffset[v.arpIndex], 131))
+		elseif C == 'Q' then
+			-- Retrigger note (+VolSlide)
+			local x = math.floor(v.fxSlotGeneric / 0x10)
+			local y =            v.fxSlotGeneric % 0x10
+			v.currVolume = math.floor(
+				RETRIGVOLSLIDEFUNC[x](v.currVolume * 0x40)) / 0x40
+			v.currVolume = math.min(math.max(v.currVolume, 0.0), 1.0)
+			if currentTick % y == 0 then
+				v.currOffset = 0
+				if V then
+					v.currVolume = V / 0x40
+				elseif I then
+					v.currVolume = v.instrument.volume / 0x40
+				end
+			end
 		elseif C == 'R' then
 			-- Tremolo
 			local pos = math.abs(v.tremoloOffset)
