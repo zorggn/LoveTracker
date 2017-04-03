@@ -1421,7 +1421,7 @@ routine.draw = function()
 		currentRow, 64),     0, y)
 	y = y + w
 	love.graphics.print(("tick:    0x%02X / 0x%02X"):format(
-		currentTick, speed),    0, y)
+		currentTick, speed-1),    0, y)
 	y = y + w
 	local h,m
 	h = math.floor(time/3600)
@@ -1433,7 +1433,7 @@ routine.draw = function()
 	y = 0
 	love.graphics.print(("tempo (T): %3d"):format(tempo), 23*8, y)
 	y = y + w
-	love.graphics.print(("speed (A): %3d"):format(speed+1), 23*8, y)
+	love.graphics.print(("speed (A): %3d"):format(speed), 23*8, y)
 	y = y + w
 	i = math.floor(samplingPeriod*1000000)
 	f = math.floor(samplingPeriod*10000000000) - (i * 10000)
