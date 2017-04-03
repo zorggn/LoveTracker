@@ -29,13 +29,14 @@ local smoothScrolling
 
 local speed, tempo
 local loopRow, loopCnt, patternLoop, filterSet
-local positionJump, patternBreak, patternDelay, glissando, globalVolume
+local positionJump, patternBreak, patternDelay, globalVolume
+local glissando--,vibratoWaveform, tremoloWaveform
 
 -- Constants
 
 -- TODO: do dim. analysis on these numbers so we can reason about them better.
 
-local ARPEGGIOPERIOD = 1 / 50 -- Hz; ST3's arp isn't tied to the speed...
+local ARPEGGIOPERIOD = 1 / 50 -- Hz; ST3's arp isn't tied to the speed var.
 
 local SINETABLE = {
 	[0] =   0,  24,  49,  74,  97, 120, 141, 161,
@@ -268,7 +269,6 @@ Voice.process = function(v, currentTick)
 	Dx = math.floor(D / 16)
 	Dy =            D % 16
 
-	
 
 	-- Note Cut processed regardless of Effect Slot.
 	-- This method accomplishes the following: On T0 of the row where the note
@@ -465,7 +465,7 @@ Voice.process = function(v, currentTick)
 		elseif C == 'R' then
 			-- Tremolo
 			if D > 0x00 then
-				v.fxSlotGeneric = D -- TODO: Test this.
+				v.fxSlotGeneric = D -- TODO: Test if D goes into generic slot...
 			end
 			-- If wavecontrol is retriggering, then reset offset here.
 			if v.tremoloWaveform < 4 then
@@ -546,6 +546,7 @@ Voice.process = function(v, currentTick)
 	else 
 		-- Tn Effects.
 		if     C == 'D' then
+			-- VolSLide
 			local x = math.floor(v.fxSlotGeneric / 0x10)
 			local y =            v.fxSlotGeneric % 0x10
 			if     y == 0x0 then
@@ -556,18 +557,21 @@ Voice.process = function(v, currentTick)
 				v.currVolume = math.max(0.0, v.currVolume - (y / 0x40))
 			end
 		elseif C == 'E' then
+			-- Portamento Down
 			local x = math.floor(v.fxSlotPortamento / 0x10)
 			if x < 0xE then
 				v.instPeriod = v.instPeriod + v.fxSlotPortamento * 4
 			end
 			v.instPeriod = math.min(v.instPeriod, 27392)
 		elseif C == 'F' then
+			-- Portamento Up
 			local x = math.floor(v.fxSlotPortamento / 0x10)
 			if x < 0xE then
 				v.instPeriod = v.instPeriod - v.fxSlotPortamento * 4
 			end
 			v.instPeriod = math.max(v.instPeriod, 0)
 		elseif C == 'G' then
+			-- Tone Portamento
 			if not glissando then
 				if     v.instPeriod > v.glisPeriod then
 					v.instPeriod = v.instPeriod - v.fxSlotPortamento * 4
