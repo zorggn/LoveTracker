@@ -790,7 +790,7 @@ routine.load = function(mod)
 	visualizer      = {}
 
 	positionJump, patternBreak, patternDelay = false, false, 0
-	glissando, globalVolume = false, module.globalVolume
+	glissando, globalVolume = false, module.globalVolume / 0x40
 
 	timeSigNumer, timeSigDenom = 4, 4
 	speed = module.initialSpeed
@@ -919,7 +919,7 @@ routine.process = function()
 				elseif string.char(cell.effectCommand + 0x40) == 'V' then
 					-- Global Volume
 					if cell.effectData <= 0x40 then
-						globalVolume = cell.effectData
+						globalVolume = cell.effectData / 0x40
 					end
 				end
 			end
@@ -1054,6 +1054,9 @@ routine.render = function(dt)
 					visualizer[v].length
 			end
 		end
+
+		-- Apply global volume once (may not be 100% accurate, but it works.)
+		smpL, smpR = smpL * globalVolume, smpR * globalVolume
 
 		-- Normalize output.
 		smpL, smpR = smpL / normRatio, smpR / normRatio
