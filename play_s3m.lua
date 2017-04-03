@@ -270,7 +270,23 @@ Voice.process = function(v, currentTick)
 
 	
 
-	if currentTick == 0 then
+	-- Note Cut processed regardless of Effect Slot.
+	-- This method accomplishes the following: On T0 of the row where the note
+	-- cut is set, this code won't run, since setting the value happens later;
+	-- however, after that, if the value is greater or equal to the speed, then
+	-- this will overflow into the next row, which may or may not be correct
+	-- for modules.
+	-- Note that if we didn't want to support cut-tick-overflow, then putting
+	-- this code into a TN SCx effect handler would work perfectly.
+	--if v.noteCutTicks > 0 then
+	--	v.noteCutTicks = v.noteCutTicks - 1
+	--	if v.noteCutTicks == 0 then
+	--		v.currVolume = 0.0
+	--	end
+	--end
+
+	-- Note Delay: This only works if noteDelayTicks < speed.
+	if currentTick == v.noteDelayTicks then
 		-- Combinatorics...
 		if         N and     I then
 			-- Apply instrument
@@ -454,6 +470,61 @@ Voice.process = function(v, currentTick)
 			-- If wavecontrol is retriggering, then reset offset here.
 			if v.tremoloWaveform < 4 then
 				v.tremoloOffset = 32
+			end
+		elseif C == 'S' then
+			local x = math.floor(D / 0x10)
+			if x == 0x1 then
+				-- Glissando
+				-- TODO: This is probably global, so nothing goes in here.
+			elseif x == 0x2 then
+				-- Set FineTune
+				-- TODO: This seemingly destroys any other previous value for
+				--       c4speed; check if this is actually how it should work.
+				if v.instrument then
+					v.instrument.c4speed = C4SPEEDFINETUNES[D % 0x10]
+				end
+			elseif x == 0x3 then
+				-- Set Vibrato Waveform
+				-- TODO: See if this is global or per-channel
+				local y = D % 0x10
+				if y < 8 then
+					v.vibratoWaveform = y
+				end
+			elseif x == 0x4 then
+				-- Set Tremolo Waveform
+				-- TODO: See if this is global or per-channel
+				local y = D % 0x10
+				if y < 8 then
+					v.tremoloWaveform = y
+				end
+			elseif x == 0x8 then
+				-- Set Panning (unsigned)
+				local y = D % 0x10
+				v.currPanning = y / 0x10
+			elseif x == 0xA then
+				-- Stereo Control (signed)
+				local y = D % 0x10
+				y = y > 7 and y - 16 or y
+				v.currPanning = (8 + y) / 0xF
+			elseif x == 0xC then
+				-- Note Cut
+				local y = D % 0x10
+				-- No % -> cut may happen across rows which is probably wrong.
+				v.noteCutTicks = y % speed
+			elseif x == 0xD then
+				-- Note Delay
+				local y = D % 0x10
+				-- No % -> delay may happen across rows which is probably wrong.
+				v.noteDelayTicks = y % speed
+			elseif x == 0xF then
+				-- Invert Loop OR Funk Repeat
+				-- Thing is, there are a few possibilities here;
+				-- A. Implement Invert Loop, which irreversibly modifies the
+				--    waveform data.
+				-- B. Implement Funk Repeat, which only works on instruments
+				--    with very specific settings.
+				-- C. Implement it differently, e.g. looping will be reversed
+				-- To be honest, it really is the best solution to just not.
 			end
 		elseif C == 'U' then
 			-- Fine Vibrato
@@ -640,6 +711,18 @@ Voice.process = function(v, currentTick)
 				v.currVolume = math.max(v.currVolume - (delta / 0x40), 1)
 			end
 			v.tremoloOffset = (v.tremoloOffset + speed) % 64
+		elseif C == 'S' then
+			local x = math.floor(D / 0x10)
+			if x == 0xC then
+				-- Note Cut
+				-- This code works for the case when noteCutTicks >= speed.
+				if v.noteCutTicks > 0 then
+					v.noteCutTicks = v.noteCutTicks - 1
+					if v.noteCutTicks == 0 then
+						v.currVolume = 0.0
+					end
+				end
+			end
 		elseif C == 'U' then
 			-- Fine Vibrato
 			local pos = math.abs(v.vibratoOffset)
@@ -758,7 +841,7 @@ Voice.new = function(ch, pan)
 	v.currOffset       = 0.0    -- Current sample offset. (floored -> matrix displayable)
 
 	v.currVolume       = 0.0    -- Current volume.
-	v.currPanning      = pan/0xF-- Current panning.
+	v.currPanning      = pan / 0xF -- Current panning.
 
 	v.currInstrument   = 0x00   -- Only for display purposes.
 
@@ -903,8 +986,14 @@ routine.process = function()
 						patternLoop = false
 					end
 				elseif string.char(cell.effectCommand + 0x40) == 'S' and
+					math.floor(cell.effectData/16) == 0x0 then
+						-- Set Filter
+						-- TODO: This must have been global... right?
+						--       Also, OALS has filter objects, so possible.
+				elseif string.char(cell.effectCommand + 0x40) == 'S' and
 					math.floor(cell.effectData/16) == 0x1 then
 						-- Glissando Control
+						-- TODO: See if this was global or per-channel.
 						local x = cell.effectData%16
 						if x == 0 then 
 							glissando = false
@@ -914,17 +1003,19 @@ routine.process = function()
 				elseif string.char(cell.effectCommand + 0x40) == 'S' and
 					math.floor(cell.effectData/16) == 0x3 then
 						-- Vibrato Waveform
-						local x = cell.effectData%16
-						if x < 8 then
-							vibratoWaveform = x
-						end
+						-- TODO: See if this was global or per-channel.
+						--local x = cell.effectData%16
+						--if x < 8 then
+						--	vibratoWaveform = x
+						--end
 				elseif string.char(cell.effectCommand + 0x40) == 'S' and
 					math.floor(cell.effectData/16) == 0x4 then
 						-- Tremolo Waveform
-						local x = cell.effectData%16
-						if x < 8 then
-							tremoloWaveform = x
-						end
+						-- TODO: See if this was global or per-channel.
+						--local x = cell.effectData%16
+						--if x < 8 then
+						--	tremoloWaveform = x
+						--end
 				elseif string.char(cell.effectCommand + 0x40) == 'S' and
 					math.floor(cell.effectData/16) == 0xB then
 						-- Pattern Loop
