@@ -427,6 +427,16 @@ Voice.process = function(v, currentTick)
 				v.arpOffset[1] = math.floor(v.fxSlotGeneric / 0x10)
 				v.arpOffset[2] =            v.fxSlotGeneric % 0x10
 			end
+		elseif C == 'K' then
+			-- VolSlide + Vibrato
+			if D > 0x00 then
+				v.fxSlotGeneric = D -- Sets the volume slide params only.
+			end
+		elseif C == 'L' then
+			-- VolSlide + TonePorta
+			if D > 0x00 then
+				v.fxSlotGeneric = D -- Sets the volume slide params only.
+			end
 		elseif C == 'O' then
 			-- Set Offset
 			v.fxSlotGeneric = D
@@ -523,6 +533,67 @@ Voice.process = function(v, currentTick)
 			-- Arpeggio
 			v.arpIndex = currentTick % 3
 			v:setPeriod(math.min(v.lastNote + v.arpOffset[v.arpIndex], 131))
+		elseif C == 'K' then
+			-- Vibrato
+			local pos = math.abs(v.vibratoOffset)
+			local wf = v.vibratoWaveform % 4
+			local speed = math.floor(v.fxSlotVibrato / 0x10)
+			local depth = v.fxSlotVibrato % 0x10
+			local delta = WAVEFORMTABLE[wf][pos % 32] * depth / 32
+			--delta = delta / 128 -- These two steps are the /32 above.
+			--delta = delta * 4 -- For fine vibrato is the unmultiplied one
+			if pos < 32 then
+				v.vibratoFreqDelta =  delta
+			else
+				v.vibratoFreqDelta = -delta
+			end
+			v.vibratoOffset = (v.vibratoOffset + speed) % 64
+			-- VolSlide
+			local x = math.floor(v.fxSlotGeneric / 0x10)
+			local y =            v.fxSlotGeneric % 0x10
+			if     y == 0x0 then
+				-- up x units
+				v.currVolume = math.min(1.0, v.currVolume + (x / 0x40))
+			elseif x == 0x0 then
+				-- down y units
+				v.currVolume = math.max(0.0, v.currVolume - (y / 0x40))
+			end
+		elseif C == 'L' then
+			-- TonePorta
+			if not glissando then
+				if     v.instPeriod > v.glisPeriod then
+					v.instPeriod = v.instPeriod - v.fxSlotPortamento * 4
+					if v.instPeriod < v.glisPeriod then
+						v.instPeriod = v.glisPeriod
+					end
+				elseif v.instPeriod < v.glisPeriod then
+					v.instPeriod = v.instPeriod + v.fxSlotPortamento * 4
+					if v.instPeriod > v.glisPeriod then
+						v.instPeriod = v.glisPeriod
+					end
+				end
+			else
+				-- TODO: Check if semitone-glissando implementation is correct.
+				if v.instPeriod > v.glisPeriod then
+					local p = math.max(PERIODBINSEARCH(v.glisPeriod)-1, 0)
+					v.instPeriod = NOTEPERIOD[p]
+						* (DEFAULTC4SPEED / v.instrument.c4speed)
+				elseif v.instPeriod < v.glisPeriod then
+					local p = math.min(PERIODBINSEARCH(v.glisPeriod)+1, 131)
+					v.instPeriod = NOTEPERIOD[p]
+						* (DEFAULTC4SPEED / v.instrument.c4speed)
+				end
+			end
+			-- VolSlide
+			local x = math.floor(v.fxSlotGeneric / 0x10)
+			local y =            v.fxSlotGeneric % 0x10
+			if     y == 0x0 then
+				-- up x units
+				v.currVolume = math.min(1.0, v.currVolume + (x / 0x40))
+			elseif x == 0x0 then
+				-- down y units
+				v.currVolume = math.max(0.0, v.currVolume - (y / 0x40))
+			end
 		elseif C == 'Q' then
 			-- Retrigger note (+VolSlide)
 			local x = math.floor(v.fxSlotGeneric / 0x10)
