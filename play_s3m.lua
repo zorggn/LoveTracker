@@ -298,8 +298,7 @@ Voice.process = function(v, currentTick)
 	--	end
 	--end
 
-	-- Note Delay: This only works if noteDelayTicks < speed.
-	if currentTick == v.noteDelayTicks then
+	if currentTick == 0 and v.noteDelayTicks == 0 then
 		-- Combinatorics...
 		if         N and     I then
 			-- Apply instrument
@@ -750,11 +749,70 @@ Voice.process = function(v, currentTick)
 			local x = math.floor(D / 0x10)
 			if x == 0xC then
 				-- Note Cut
-				-- This code works for the case when noteCutTicks >= speed.
+				-- This code also works for the case when
+				-- noteCutTicks >= speed
 				if v.noteCutTicks > 0 then
 					v.noteCutTicks = v.noteCutTicks - 1
 					if v.noteCutTicks == 0 then
 						v.currVolume = 0.0
+					end
+				end
+			elseif x == 0xD then
+				-- Note Delay
+				-- This code only works for the case whe
+				-- noteDelayTicks <= speed
+				if v.noteDelayTicks > 0 then
+					v.noteDelayTicks = v.noteDelayTicks - 1
+					if noteDelayTicks == 0 then
+						-- Combinatorics...
+						if         N and     I then
+							-- Apply instrument
+							v.instrument = module.sample[I]
+							if C ~= 'G' then
+								-- Set note and reset offset to 0.
+								v:setPeriod(N)
+								v.currOffset = 0
+							end
+							-- Handle volume
+							if V then
+								v.currVolume = V / 0x40
+							else
+								if v.instrument and v.instrument.volume then
+									v.currVolume = v.instrument.volume / 0x40
+								end
+							end
+						elseif     N and not I then
+							if C ~= 'G' then
+								-- Set note and reset offset to 0.
+								v:setPeriod(N)
+								v.currOffset = 0
+							end
+							-- Handle volume
+							if V then
+								v.currVolume = V / 0x40
+							else
+								-- Do nothing here.
+							end
+						elseif not N and     I then
+							-- Apply instrument
+							v.instrument = module.sample[I]
+							-- Handle volume
+							if V then
+								v.currVolume = V / 0x40
+							else
+								if v.instrument then
+									v.currVolume = v.instrument.volume / 0x40
+								end
+							end
+						elseif not N and not I then
+							-- Handle volume
+							if V then
+								v.currVolume = V / 0x40
+							else
+								-- Do nothing here.
+							end
+						end
+						if N then v.lastNote = N end
 					end
 				end
 			end
