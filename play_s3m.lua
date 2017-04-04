@@ -42,10 +42,18 @@ local SINETABLE = {
 	[0] =   0,  24,  49,  74,  97, 120, 141, 161,
 	      180, 197, 212, 224, 235, 244, 250, 253,
 	      255, 253, 250, 244, 235, 224, 212, 197,
+	      180, 161, 141, 120,  97,  74,  49,  24,
+	        0,  24,  49,  74,  97, 120, 141, 161,
+	      180, 197, 212, 224, 235, 244, 250, 253,
+	      255, 253, 250, 244, 235, 224, 212, 197,
 	      180, 161, 141, 120,  97,  74,  49,  24}
 
 local RAMPDOWNTABLE = {
-	[0] =   0,   8,  16,  24,  32,  40,  48,  56,
+	[0] = 255, 247, 239, 231, 223, 215, 207, 199,
+	      191, 183, 175, 167, 159, 151, 143, 135,
+	      127, 119, 111, 103,  95,  87,  79,  71,
+	       63,  55,  47,  39,  31,  23,  15,   7, 
+	        0,   8,  16,  24,  32,  40,  48,  56,
 	       64,  72,  80,  88,  96, 104, 112, 120,
 	      128, 136, 144, 152, 160, 168, 176, 184,
 	      192, 200, 208, 216, 224, 232, 240, 248}
@@ -54,17 +62,20 @@ local SQUARETABLE = {
 	[0] = 255, 255, 255, 255, 255, 255, 255, 255,
 	      255, 255, 255, 255, 255, 255, 255, 255,
 	      255, 255, 255, 255, 255, 255, 255, 255,
+	      255, 255, 255, 255, 255, 255, 255, 255,
+	      255, 255, 255, 255, 255, 255, 255, 255,
+	      255, 255, 255, 255, 255, 255, 255, 255,
+	      255, 255, 255, 255, 255, 255, 255, 255,
 	      255, 255, 255, 255, 255, 255, 255, 255}
 
 local RANDOMTABLE = {}
 	-- This is probably not how the random waveform is implemented...
 	-- probably means to select one of the above 3 randomly...
 	-- TODO: Figure it out.
-	for i = 0, 31 do RANDOMTABLE[i] = love.math.random(0, 255) end
+	for i = 0, 63 do RANDOMTABLE[i] = love.math.random(0, 255) end
 
 local WAVEFORMTABLE = {
-	[0] = SINETABLE, RAMPDOWNTABLE, SQUARETABLE, RANDOMTABLE,
-	      SINETABLE, RAMPDOWNTABLE, SQUARETABLE, RANDOMTABLE}
+	[0] = SINETABLE, RAMPDOWNTABLE, SQUARETABLE, RANDOMTABLE}
 
 local RETRIGVOLSLIDEFUNC = {
 	  [0] = function(v) return v end,
@@ -419,7 +430,7 @@ Voice.process = function(v, currentTick)
 				v.fxSlotVibrato = math.floor(v.fxSlotVibrato / 0x10) * 0x10 + y
 			end
 			-- If wavecontrol is retriggering, then reset offset here.
-			if v.vibratoWaveform < 4 then
+			if N and v.vibratoWaveform < 4 then
 				v.vibratoOffset = 32
 			end
 		elseif C == 'I' then
@@ -468,7 +479,7 @@ Voice.process = function(v, currentTick)
 				v.fxSlotGeneric = D -- TODO: Test if D goes into generic slot...
 			end
 			-- If wavecontrol is retriggering, then reset offset here.
-			if v.tremoloWaveform < 4 then
+			if N and v.tremoloWaveform < 4 then
 				v.tremoloOffset = 32
 			end
 		elseif C == 'S' then
@@ -539,7 +550,7 @@ Voice.process = function(v, currentTick)
 				v.fxSlotVibrato = math.floor(v.fxSlotVibrato / 0x10) * 0x10 + y
 			end
 			-- If wavecontrol is retriggering, then reset offset here.
-			if v.vibratoWaveform < 4 then
+			if N and v.vibratoWaveform < 4 then
 				v.vibratoOffset = 32
 			end
 		end
@@ -598,17 +609,20 @@ Voice.process = function(v, currentTick)
 			end
 		elseif C == 'H' then
 			-- Vibrato
-			local pos = math.abs(v.vibratoOffset)
+			local pos = v.vibratoOffset - 32 -- [0,63] -> [-32,31]
 			local wf = v.vibratoWaveform % 4
 			local speed = math.floor(v.fxSlotVibrato / 0x10)
 			local depth = v.fxSlotVibrato % 0x10
-			local delta = WAVEFORMTABLE[wf][pos % 32] * depth / 32
-			--delta = delta / 128 -- These two steps are the /32 above.
-			--delta = delta * 4 -- For fine vibrato is the unmultiplied one
-			if pos < 32 then
-				v.vibratoFreqDelta =  delta
-			else
+			local index = v.vibratoOffset
+			local delta = WAVEFORMTABLE[wf][index]
+			--delta = delta * depth
+			--delta = delta / 128
+			--delta = delta * 4 -- Fine vibrato is the unmultiplied one
+			delta = delta * depth / 32
+			if pos < 0 then
 				v.vibratoFreqDelta = -delta
+			else
+				v.vibratoFreqDelta = delta
 			end
 			v.vibratoOffset = (v.vibratoOffset + speed) % 64
 		elseif C == 'I' then
@@ -626,17 +640,20 @@ Voice.process = function(v, currentTick)
 			v:setPeriod(math.min(v.lastNote + v.arpOffset[v.arpIndex], 131))
 		elseif C == 'K' then
 			-- Vibrato
-			local pos = math.abs(v.vibratoOffset)
+			local pos = v.vibratoOffset - 32 -- [0,63] -> [-32,31]
 			local wf = v.vibratoWaveform % 4
 			local speed = math.floor(v.fxSlotVibrato / 0x10)
 			local depth = v.fxSlotVibrato % 0x10
-			local delta = WAVEFORMTABLE[wf][pos % 32] * depth / 32
-			--delta = delta / 128 -- These two steps are the /32 above.
-			--delta = delta * 4 -- For fine vibrato is the unmultiplied one
-			if pos < 32 then
-				v.vibratoFreqDelta =  delta
-			else
+			local index = v.vibratoOffset
+			local delta = WAVEFORMTABLE[wf][index]
+			--delta = delta * depth
+			--delta = delta / 128
+			--delta = delta * 4 -- Fine vibrato is the unmultiplied one
+			delta = delta * depth / 32
+			if pos < 0 then
 				v.vibratoFreqDelta = -delta
+			else
+				v.vibratoFreqDelta = delta
 			end
 			v.vibratoOffset = (v.vibratoOffset + speed) % 64
 			-- VolSlide
@@ -702,13 +719,16 @@ Voice.process = function(v, currentTick)
 			end
 		elseif C == 'R' then
 			-- Tremolo
-			local pos = math.abs(v.tremoloOffset)
+			local pos = math.abs(v.tremoloOffset) - 32 -- [0,63] -> [-32,31]
 			local wf = v.tremoloWaveform % 4
 			local speed = math.floor(v.fxSlotGeneric / 0x10)
 			local depth = v.fxSlotGeneric % 0x10
-			local delta = WAVEFORMTABLE[wf][pos % 32] * depth / 16
-			-- Similarly to vibrato, but here, the formula would have been
-			-- delta / 64 (* 4) instead.
+			local index = v.tremoloOffset
+			local delta = WAVEFORMTABLE[wf][index]
+			--delta = delta * depth
+			--delta = delta / 64
+			--delta = delta * 4
+			delta = delta * depth / 16
 			if pos < 32 then
 				v.currVolume = math.min(v.currVolume + (delta / 0x40), 1) 
 			else
@@ -729,17 +749,21 @@ Voice.process = function(v, currentTick)
 			end
 		elseif C == 'U' then
 			-- Fine Vibrato
-			local pos = math.abs(v.vibratoOffset)
+			local pos = v.vibratoOffset - 32 -- [0,63] -> [-32,31]
 			local wf = v.vibratoWaveform % 4
 			local speed = math.floor(v.fxSlotVibrato / 0x10)
 			local depth = v.fxSlotVibrato % 0x10
-			local delta = WAVEFORMTABLE[wf][pos % 32] * depth / 128
-			--delta = delta / 128 -- These two steps are the /32 above.
-			--delta = delta * 4 -- For fine vibrato is the unmultiplied one
-			if pos < 32 then
-				v.vibratoFreqDelta =  delta
-			else
+			local index = v.vibratoOffset
+			local delta = WAVEFORMTABLE[wf][index]
+			--delta = delta * depth
+			--delta = delta / 128
+			--delta = delta * 1
+			delta = delta * depth / 128
+			print(pos, wf, speed, depth, index, delta)
+			if pos < 0 then
 				v.vibratoFreqDelta = -delta
+			else
+				v.vibratoFreqDelta = delta
 			end
 			v.vibratoOffset = (v.vibratoOffset + speed) % 64
 		end
