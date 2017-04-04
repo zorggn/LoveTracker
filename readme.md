@@ -5,32 +5,39 @@ No versions, use the commit history to keep track. :V
 
 ### Info
 
-- S3M module parsing and playback mostly works.
-- Organya parsing and playback mostly works.
+- S3M module parsing and playback works.
+- Organya parsing and playback works.
 
 - Needs a 0.11 löve nightly.
-
-- <del>Requires this font (unless you edit out a line): http://www.fixedsysexcelsior.com/</del> font included.
 
 ### Usage
 
 - Drop an .s3m (s3m.* if amiga order) file onto the window. as3m also works, though without any sound whatsoever.
 - Alternatively, drop an .org (org.* works too for reasons) file onto the window.
 
+### ScreamTracker 3 playroutine features
+
+- Buffer-based timing for accurate playback and tracking.
+- Support for both 16-bit and stereo samples.
+- Channel (voice) matrix view.
+- Global stats view.
+- Piano keyboard view (shows both note and corrected instrument period values, shows arpeggio state.)
+- Pattern view (smooth-scrolling available.)
+- All effects supported by ST3 implemented (SFx isn't for obvious reasons, S0x because i'm lazy to add an OALS effect object.)
+
+### Organya playroutine features
+
+- Buffer-based timing for accurate playback and tracking.
+- Channel (voice) matrix view.
+- Global stats view.
+- Org-02 subtype support only.
+
 ### TODO
 
-- Eternal code cleanup
-- <del>Better timing implementation.</del> Works, though low enough buffer sizes may crash Löve after some time... currently testing why
-- Code better interface
+- Eternal code cleanup.
+- Code better (graphical) interface.
 - Allow editing and saving (since this would be a tracker, not just a player...)
 
-- <del>Smooth scrolling</del> Done.
-
-- <del>Understand and fix period/frequency calculation things (compared to OpenMPT, this is horribly "off-key").</del> Effects now work with the instrument-c4speed-adjusted period values, but the period table is still probably off, since the overall pitch is still lower than OpenMPT, and probably ST3 as well.
-- <del>Related to the above, fix E/F/G effects.</del> Done.
-- <del>Actually parse the s3m flags field.</del> Done.
-- Implement missing effects (<del>H</del>, I, J, K, L, Q, R, <del>all</del> some of the S ones that remain, U, V).
-- <del>Adding support for 16bit samples because apparently they're allowed in this format.</del> Done, no Stereo sample support though, but a flag exists for that as well; maybe later?
-- Speaking of, s3m-s might have their cwt fields be set to something totally alien to scream tracker, like mentioned above, so that should be handled as well.
+- S3M modules might have their cw/t fields be set to something totally alien to scream tracker 3, so that should be handled.
 
 - Eventual support for other modules (or not, time will tell.)
