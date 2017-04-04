@@ -30,7 +30,6 @@ local smoothScrolling
 local speed, tempo
 local loopRow, loopCnt, patternLoop, filterSet
 local positionJump, patternBreak, patternDelay, globalVolume
-local glissando--,vibratoWaveform, tremoloWaveform
 
 -- Constants
 
@@ -217,6 +216,7 @@ Voice.setPeriod = function(v, pitch)
 	v.notePeriod = NOTEPERIOD[pitch]
 	if v.instrument and v.instrument.c4speed then
 		v.instPeriod = v.notePeriod * (DEFAULTC4SPEED / v.instrument.c4speed)
+		v.tempPeriod = v.instPeriod -- Needed for semitone glissando.
 	end
 end
 
@@ -486,7 +486,8 @@ Voice.process = function(v, currentTick)
 			local x = math.floor(D / 0x10)
 			if x == 0x1 then
 				-- Glissando
-				-- TODO: This is probably global, so nothing goes in here.
+				local y = D % 0x10
+				v.glissando = not (y == 0) -- If true, slide by semitones.
 			elseif x == 0x2 then
 				-- Set FineTune
 				-- TODO: This seemingly destroys any other previous value for
@@ -583,28 +584,32 @@ Voice.process = function(v, currentTick)
 			v.instPeriod = math.max(v.instPeriod, 0)
 		elseif C == 'G' then
 			-- Tone Portamento
-			if not glissando then
-				if     v.instPeriod > v.glisPeriod then
-					v.instPeriod = v.instPeriod - v.fxSlotPortamento * 4
-					if v.instPeriod < v.glisPeriod then
-						v.instPeriod = v.glisPeriod
-					end
-				elseif v.instPeriod < v.glisPeriod then
-					v.instPeriod = v.instPeriod + v.fxSlotPortamento * 4
-					if v.instPeriod > v.glisPeriod then
-						v.instPeriod = v.glisPeriod
-					end
+			if     v.tempPeriod > v.glisPeriod then
+				v.tempPeriod = v.tempPeriod - v.fxSlotPortamento * 4
+				if v.tempPeriod < v.glisPeriod then
+					v.tempPeriod = v.glisPeriod
 				end
+			elseif v.tempPeriod < v.glisPeriod then
+				v.tempPeriod = v.tempPeriod + v.fxSlotPortamento * 4
+				if v.tempPeriod > v.glisPeriod then
+					v.tempPeriod = v.glisPeriod
+				end
+			end
+
+			if not v.glissando then
+				v.instPeriod = v.tempPeriod
 			else
-				-- TODO: Check if semitone-glissando implementation is correct.
-				if v.instPeriod > v.glisPeriod then
-					local p = math.max(PERIODBINSEARCH(v.glisPeriod)-1, 0)
+				-- This works, though it's not exact to either ST3 not OpenMPT.
+				if v.tempPeriod > v.glisPeriod then
+					local p = PERIODBINSEARCH(v.tempPeriod)-1
+					p = math.max(p, 0)
 					v.instPeriod = NOTEPERIOD[p]
-						* (DEFAULTC4SPEED / v.instrument.c4speed)
-				elseif v.instPeriod < v.glisPeriod then
-					local p = math.min(PERIODBINSEARCH(v.glisPeriod)+1, 131)
+						--* (DEFAULTC4SPEED / v.instrument.c4speed)
+				elseif v.tempPeriod < v.glisPeriod then
+					local p = PERIODBINSEARCH(v.tempPeriod)+1
+					p = math.min(p, 131)
 					v.instPeriod = NOTEPERIOD[p]
-						* (DEFAULTC4SPEED / v.instrument.c4speed)
+						--* (DEFAULTC4SPEED / v.instrument.c4speed)
 				end
 			end
 		elseif C == 'H' then
@@ -668,28 +673,32 @@ Voice.process = function(v, currentTick)
 			end
 		elseif C == 'L' then
 			-- TonePorta
-			if not glissando then
-				if     v.instPeriod > v.glisPeriod then
-					v.instPeriod = v.instPeriod - v.fxSlotPortamento * 4
-					if v.instPeriod < v.glisPeriod then
-						v.instPeriod = v.glisPeriod
-					end
-				elseif v.instPeriod < v.glisPeriod then
-					v.instPeriod = v.instPeriod + v.fxSlotPortamento * 4
-					if v.instPeriod > v.glisPeriod then
-						v.instPeriod = v.glisPeriod
-					end
+			if     v.tempPeriod > v.glisPeriod then
+				v.tempPeriod = v.tempPeriod - v.fxSlotPortamento * 4
+				if v.tempPeriod < v.glisPeriod then
+					v.tempPeriod = v.glisPeriod
 				end
+			elseif v.tempPeriod < v.glisPeriod then
+				v.tempPeriod = v.tempPeriod + v.fxSlotPortamento * 4
+				if v.tempPeriod > v.glisPeriod then
+					v.tempPeriod = v.glisPeriod
+				end
+			end
+
+			if not v.glissando then
+				v.instPeriod = v.tempPeriod
 			else
-				-- TODO: Check if semitone-glissando implementation is correct.
-				if v.instPeriod > v.glisPeriod then
-					local p = math.max(PERIODBINSEARCH(v.glisPeriod)-1, 0)
+				-- This works, though it's not exact to either ST3 not OpenMPT.
+				if v.tempPeriod > v.glisPeriod then
+					local p = PERIODBINSEARCH(v.tempPeriod)-1
+					p = math.max(p, 0)
 					v.instPeriod = NOTEPERIOD[p]
-						* (DEFAULTC4SPEED / v.instrument.c4speed)
-				elseif v.instPeriod < v.glisPeriod then
-					local p = math.min(PERIODBINSEARCH(v.glisPeriod)+1, 131)
+						--* (DEFAULTC4SPEED / v.instrument.c4speed)
+				elseif v.tempPeriod < v.glisPeriod then
+					local p = PERIODBINSEARCH(v.tempPeriod)+1
+					p = math.min(p, 131)
 					v.instPeriod = NOTEPERIOD[p]
-						* (DEFAULTC4SPEED / v.instrument.c4speed)
+						--* (DEFAULTC4SPEED / v.instrument.c4speed)
 				end
 			end
 			-- VolSlide
@@ -901,6 +910,9 @@ Voice.new = function(ch, pan)
 	v.tremoloOffset    = 32
 	v.vibratoFreqDelta = 0
 
+	v.glissando        = false -- ST3 proved this is also per-channel.
+	v.tempPeriod       = 0     -- Need to behave like non-gliss Gxx instperiod.
+
 	v.setOffset        = 0x0000 -- Oxx setOffset calculated value.
 
 
@@ -1018,32 +1030,6 @@ routine.process = function()
 						-- Set Filter
 						-- TODO: This must have been global... right?
 						--       Also, OALS has filter objects, so possible.
-				elseif string.char(cell.effectCommand + 0x40) == 'S' and
-					math.floor(cell.effectData/16) == 0x1 then
-						-- Glissando Control
-						-- TODO: See if this was global or per-channel.
-						local x = cell.effectData%16
-						if x == 0 then 
-							glissando = false
-						elseif x == 1 then
-							glissando = true
-						end
-				elseif string.char(cell.effectCommand + 0x40) == 'S' and
-					math.floor(cell.effectData/16) == 0x3 then
-						-- Vibrato Waveform
-						-- TODO: See if this was global or per-channel.
-						--local x = cell.effectData%16
-						--if x < 8 then
-						--	vibratoWaveform = x
-						--end
-				elseif string.char(cell.effectCommand + 0x40) == 'S' and
-					math.floor(cell.effectData/16) == 0x4 then
-						-- Tremolo Waveform
-						-- TODO: See if this was global or per-channel.
-						--local x = cell.effectData%16
-						--if x < 8 then
-						--	tremoloWaveform = x
-						--end
 				elseif string.char(cell.effectCommand + 0x40) == 'S' and
 					math.floor(cell.effectData/16) == 0xB then
 						-- Pattern Loop
