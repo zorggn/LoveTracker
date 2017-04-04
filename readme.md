@@ -39,5 +39,7 @@ No versions, use the commit history to keep track. :V
 - Allow editing and saving (since this would be a tracker, not just a player...)
 
 - S3M modules might have their cw/t fields be set to something totally alien to scream tracker 3, so that should be handled.
+- Implement a crude AdLib/OPL2 synth so that modules that use that kind of instruments also produce sound.
+- Implement Org-03 (and Org-01 if specs can be inferred/gathered) playback.
 
 - Eventual support for other modules (or not, time will tell.)
