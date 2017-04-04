@@ -25,6 +25,18 @@ No versions, use the commit history to keep track. :V
 - Pattern view (smooth-scrolling available.)
 - All effects supported by ST3 implemented (SFx isn't for obvious reasons, S0x because i'm lazy to add an OALS effect object.)
 
+#### Key layout:
+
+	- left arrow: offset pattern view by 1 channel to the right
+	- right arrow: offset pattern view by 1 channel to the left
+	- up arrow: go to previous order
+	- down arrow: go to next order
+	- w: increase tempo
+	- s: decrease tempo
+	- a: decrease speed
+	- d: increase speed
+	- spacebar: toggle smooth scrolling
+
 ### Organya playroutine features
 
 - Buffer-based timing for accurate playback and tracking.
