@@ -31,6 +31,8 @@ local speed, tempo
 local loopRow, loopCnt, patternLoop, filterSet
 local positionJump, patternBreak, patternDelay, globalVolume
 
+local patternInvalidated = true
+
 -- Constants
 
 -- TODO: do dim. analysis on these numbers so we can reason about them better.
@@ -940,7 +942,7 @@ routine.load = function(mod)
 	filterSet   = false
 
 	interpolation   = 'nearest'
-	smoothScrolling = true
+	smoothScrolling = false
 	visualizer      = {}
 
 	positionJump, patternBreak, patternDelay = false, false, 0
@@ -979,6 +981,7 @@ routine.load = function(mod)
 	currentRow      = 0
 	currentOrder    = 0
 	currentPattern  = module.order[currentOrder]
+	patternInvalidated = true
 
 	love.timer.step()
 end
@@ -1084,6 +1087,7 @@ routine.step = function()
 			if currentOrder + 1 < module.orderCount then
 				currentOrder   = currentOrder + 1
 				currentPattern = module.order[currentOrder]
+				patternInvalidated = true
 			else
 				currentOrder   = 0 -- No song restart marker in s3m.
 				currentPattern = module.order[currentOrder]
@@ -1114,6 +1118,7 @@ routine.step = function()
 				currentOrder   = positionJump % module.orderCount
 				currentPattern = module.order[currentOrder]
 				currentRow     = 0
+				patternInvalidated = true
 			elseif not positionJump and patternBreak then
 				-- Jump to given row of next order.
 				currentOrder   = (currentOrder + 1) % module.orderCount
@@ -1121,6 +1126,7 @@ routine.step = function()
 				if currentPattern < 254 then
 					currentRow = patternBreak % 64 -- See above.
 				end
+				patternInvalidated = true
 			else
 				-- Jump to given row of given order.
 				currentOrder   = positionJump % module.orderCount
@@ -1128,6 +1134,7 @@ routine.step = function()
 				if currentPattern < 254 then
 					currentRow = patternBreak % 64 -- See above.
 				end
+				patternInvalidated = true
 			end
 			positionJump, patternBreak = false, false
 		end
@@ -1140,6 +1147,7 @@ routine.step = function()
 				currentPattern = module.order[currentOrder]
 				currentRow     = 0
 				currentTick    = 0
+				patternInvalidated = true
 				break
 			end
 		end
@@ -1150,6 +1158,7 @@ routine.step = function()
 			currentRow     = 0
 			currentTick    = 0
 			time = 0
+			patternInvalidated = true
 		end
 	end
 end
@@ -1264,10 +1273,13 @@ local noteTf = function(n)
 		return ("%1s%1s%1X"):format(letter[class], symbol[class], oct)
 	end
 end
+
 local textCP, textPP, textNP
 textCP = love.graphics.newText(love.graphics.getFont())
 textPP = love.graphics.newText(love.graphics.getFont())
 textNP = love.graphics.newText(love.graphics.getFont())
+
+local visChOffset = 0
 
 routine.draw = function()
 	love.graphics.setBackgroundColor(0.1,0.2,0.4)
@@ -1275,104 +1287,163 @@ routine.draw = function()
 	-- Patterns
 	---[=[
 	love.graphics.push()
-	love.graphics.translate(0, 300+(-12*currentRow))
-
-	textPP:clear()
-	textCP:clear()
-	textNP:clear()
-
-	local prev, curr, next, color
-	curr = module.pattern[module.order[currentOrder]]
-	prev = module.pattern[module.order[(currentOrder - 1) % module.orderCount]]
-	next = module.pattern[module.order[(currentOrder + 1) % module.orderCount]]
 
 	local subOffset = 0
 	if smoothScrolling then
 		subOffset = -math.floor((currentTick / (speed + patternDelay)) * 12)
 	end
 
+	love.graphics.translate(0, 300+(-12*currentRow)+subOffset)
+
 	-- 227*8 == 1816 horizontal width would be needed to show 16 s3m channels.
+	local curr = module.pattern[module.order[currentOrder]]
 
-	for row = 0, 63 do
+	if patternInvalidated then
 
-		---[==[
-		if prev then
-			color = {0.5,0.5,0.25}
-			textPP:add({color, ("%02X"):format(row)},
-				0, 84+(row-64)*12+subOffset)
-			for ch = 0, module.channelCount-1 do
-				textPP:add({color, ("|%3s %2s %2s %1s%2s"):format(
-					prev[row][ch].note and
-						noteTf(prev[row][ch].note) or '...',
-					prev[row][ch].instrument and
-						("%02X"):format(prev[row][ch].instrument) or '..',
-					prev[row][ch].volume and
-						("%02X"):format(prev[row][ch].volume) or '..',
-					prev[row][ch].effectCommand and
-						string.char(prev[row][ch].effectCommand + 0x40) or '.',
-					prev[row][ch].effectData and
-						("%02X"):format(prev[row][ch].effectData) or '..')},
-					2*8+ch*14*8, 84+(row-64)*12+subOffset)
+		textPP:clear()
+		textCP:clear()
+		textNP:clear()
+
+		local prev, next, color
+		prev = module.pattern[module.order[(currentOrder - 1) %
+			module.orderCount]]
+		next = module.pattern[module.order[(currentOrder + 1) %
+			module.orderCount]]
+
+		for row = 0, 63 do
+
+			if prev then
+				color = {0.5,0.5,0.25}
+				textPP:add({color, ("%02X"):format(row)},
+					0, 84+(row-64)*12)
+				for ch = visChOffset, module.channelCount-1 do
+					textPP:add({color, ("|%3s %2s %2s %1s%2s"):format(
+						prev[row][ch].note and
+							noteTf(prev[row][ch].note) or '...',
+						prev[row][ch].instrument and
+							("%02X"):format(prev[row][ch].instrument) or
+							'..',
+						prev[row][ch].volume and
+							("%02X"):format(prev[row][ch].volume) or
+							'..',
+						prev[row][ch].effectCommand and
+							string.char(prev[row][ch].effectCommand + 0x40) or
+							'.',
+						prev[row][ch].effectData and
+							("%02X"):format(prev[row][ch].effectData) or
+							'..')
+					}, 2*8+(ch-visChOffset)*14*8, 84+(row-64)*12)
+				end
+				textPP:add({color, "|"},
+					2*8+(module.channelCount-visChOffset)*14*8, 84+(row-64)*12)
 			end
-			textPP:add({color, "|"},
-				2*8+module.channelCount*14*8, 84+(row-64)*12+subOffset)
-		end
-		--]==]
 
-		---[==[
-		if curr then
-			if row ~= currentRow then
+			if curr then
 				color = {0.75,0.75,0.75}
-			elseif currentTick == 0 then
-				color = {1.0,1.0,1.0}
-			else
-				color = {0.75,0.75,0.25}
+				textCP:add({color, ("%02X"):format(row)},
+					0, 84+row*12)
+				for ch = visChOffset, module.channelCount-1 do
+					textCP:add({color, ("|%3s %2s %2s %1s%2s"):format(
+						curr[row][ch].note and
+							noteTf(curr[row][ch].note) or 
+							'...',
+						curr[row][ch].instrument and
+							("%02X"):format(curr[row][ch].instrument) or
+							'..',
+						curr[row][ch].volume and
+							("%02X"):format(curr[row][ch].volume) or 
+							'..',
+						curr[row][ch].effectCommand and
+							string.char(curr[row][ch].effectCommand + 0x40) or
+							'.',
+						curr[row][ch].effectData and
+							("%02X"):format(curr[row][ch].effectData) or
+							'..')
+					}, 2*8+(ch-visChOffset)*14*8, 84+row*12)
+				end
+				textCP:add({color, "|"},
+					2*8+(module.channelCount-visChOffset)*14*8, 84+row*12)
 			end
-			textCP:add({color, ("%02X"):format(row)}, 0, 84+row*12+subOffset)
-			--love.graphics.print(("%02X"):format(row), 0, 84+row*12+subOffset)
-			for ch = 0, module.channelCount-1 do
-				textCP:add({color, ("|%3s %2s %2s %1s%2s"):format(
-					curr[row][ch].note and noteTf(curr[row][ch].note) or '...',
-					curr[row][ch].instrument and ("%02X"):format(curr[row][ch].instrument) or '..',
-					curr[row][ch].volume and ("%02X"):format(curr[row][ch].volume) or '..',
-					curr[row][ch].effectCommand and string.char(string.byte('A') + curr[row][ch].effectCommand - 1) or '.',
-					curr[row][ch].effectData and ("%02X"):format(curr[row][ch].effectData) or '..')},
-					2*8+ch*14*8, 84+row*12+subOffset)
-				--love.graphics.print(
-				--	("|%3s %2s %2s %1s%2s"):format(
-				--		curr[row][ch].note and noteTf(curr[row][ch].note) or '...',
-				--		curr[row][ch].instrument and ("%02X"):format(curr[row][ch].instrument) or '..',
-				--		curr[row][ch].volume and ("%02X"):format(curr[row][ch].volume) or '..',
-				--		curr[row][ch].effectCommand and string.char(string.byte('A') + curr[row][ch].effectCommand - 1) or '.',
-				--		curr[row][ch].effectData and ("%02X"):format(curr[row][ch].effectData) or '..')
-				--	,2*8+ch*14*8, 84+row*12+subOffset)
-			end
-			textCP:add({color, "|"}, 2*8+module.channelCount*14*8, 84+row*12+subOffset)
-			--love.graphics.print('|', 2*8+module.channelCount*14*8, 84+row*12+subOffset)
-		end
-		--]==]
 
-		---[==[
-		if next then
-			color = {0.5,0.25,0.75}
-			textNP:add({color, ("%02X"):format(row)}, 0, 84+(row+64)*12+subOffset)
-			for ch = 0, module.channelCount-1 do
-				textNP:add({color, ("|%3s %2s %2s %1s%2s"):format(
-					next[row][ch].note and noteTf(next[row][ch].note) or '...',
-					next[row][ch].instrument and ("%02X"):format(next[row][ch].instrument) or '..',
-					next[row][ch].volume and ("%02X"):format(next[row][ch].volume) or '..',
-					next[row][ch].effectCommand and string.char(string.byte('A') + next[row][ch].effectCommand - 1) or '.',
-					next[row][ch].effectData and ("%02X"):format(next[row][ch].effectData) or '..')},
-					2*8+ch*14*8, 84+(row+64)*12+subOffset)
+			if next then
+				color = {0.5,0.25,0.75}
+				textNP:add({color, ("%02X"):format(row)},
+					0, 84+(row+64)*12)
+				for ch = visChOffset, module.channelCount-1 do
+					textNP:add({color, ("|%3s %2s %2s %1s%2s"):format(
+						next[row][ch].note and
+							noteTf(next[row][ch].note) or
+							'...',
+						next[row][ch].instrument and
+							("%02X"):format(next[row][ch].instrument) or
+							'..',
+						next[row][ch].volume and
+							("%02X"):format(next[row][ch].volume) or
+							'..',
+						next[row][ch].effectCommand and
+							string.char(next[row][ch].effectCommand + 0x40) or
+							'.',
+						next[row][ch].effectData and
+							("%02X"):format(next[row][ch].effectData) or
+							'..')
+						},
+						2*8+(ch-visChOffset)*14*8, 84+(row+64)*12)
+				end
+				textNP:add({color, "|"},
+					2*8+(module.channelCount-visChOffset)*14*8, 84+(row+64)*12)
 			end
-			textNP:add({color, "|"}, 2*8+module.channelCount*14*8, 84+(row+64)*12+subOffset)
 		end
-		--]==]
+
+		patternInvalidated = false
 	end
 
+	-- Draw the play cursor background
+	color = {.0, .0, .0}
+	love.graphics.setColor(color)
+	love.graphics.rectangle('fill',
+		0,
+		84+currentRow*12+4,---subOffset,
+		3*8+(module.channelCount-visChOffset)*14*8,
+		12
+	)
+
+	-- Draw the pattern data
+	love.graphics.setColor(1,1,1)
 	love.graphics.draw(textPP, 0, 0)
 	love.graphics.draw(textCP, 0, 0)
 	love.graphics.draw(textNP, 0, 0)
+
+	-- Draw the play cursor
+	if currentTick == 0 then
+		color = {1.0,1.0,1.0}
+	else
+		color = {0.75,0.75,0.25}
+	end
+	love.graphics.setColor(color)
+	love.graphics.print(("%02X"):format(currentRow),
+		0, 84+currentRow*12)
+	for ch = visChOffset, module.channelCount-1 do
+		love.graphics.print(
+			("|%3s %2s %2s %1s%2s"):format(
+				curr[currentRow][ch].note and
+					noteTf(curr[currentRow][ch].note) or
+					'...',
+				curr[currentRow][ch].instrument and
+					("%02X"):format(curr[currentRow][ch].instrument) or
+					'..',
+				curr[currentRow][ch].volume and
+					("%02X"):format(curr[currentRow][ch].volume) or
+					'..',
+				curr[currentRow][ch].effectCommand and
+					string.char(curr[currentRow][ch].effectCommand + 0x40) or
+					'.',
+				curr[currentRow][ch].effectData and
+					("%02X"):format(curr[currentRow][ch].effectData) or
+					'..'
+			), 2*8+(ch-visChOffset)*14*8, 84+currentRow*12)
+	end
+	love.graphics.print('|',
+		2*8+(module.channelCount-visChOffset)*14*8, 84+currentRow*12)
 
 	love.graphics.pop()
 	--]=]
@@ -1382,9 +1453,9 @@ routine.draw = function()
 	love.graphics.push()
 	love.graphics.setLineStyle('rough')
 	love.graphics.setLineWidth(1)
-	love.graphics.translate(3*8,384)
+	love.graphics.translate(3*8,384-8)
 
-	for ch = 0, module.channelCount-1 do
+	for ch = visChOffset, module.channelCount-1 do
 		love.graphics.setColor(.4,.4,.4)
 		love.graphics.setBlendMode('multiply','premultiplied')
 		love.graphics.rectangle('fill',0,-128,104,128)
@@ -1416,7 +1487,7 @@ routine.draw = function()
 	---[=[
 	love.graphics.push()
 	love.graphics.setColor(0,0,0.3)
-	love.graphics.rectangle('fill',0,0,80*8,60)
+	love.graphics.rectangle('fill',0,0,73*8,60)
 	love.graphics.setColor(1,1,1)
 	love.graphics.translate(0,-2)
 	local i,f
@@ -1480,7 +1551,7 @@ routine.draw = function()
 	--love.graphics.translate(189*8, 0)
 	--love.graphics.translate(0, (module.channelCount+2)*12)
 	love.graphics.translate(680, 432)
-	love.graphics.scale(4,4)
+	love.graphics.scale(1,1)
 
 	for ch = 0, module.channelCount-1 do
 		love.graphics.setColor(1,1,1)
@@ -1599,6 +1670,42 @@ routine.draw = function()
 	love.graphics.pop()
 	--]=]
 
+end
+
+routine.keypressed = function(k,s)
+	if s == 'left' then
+		visChOffset = math.max(0, visChOffset - 1)
+		patternInvalidated = true
+	elseif s == 'right' then
+		visChOffset = math.min(module.channelCount-1, visChOffset + 1)
+		patternInvalidated = true
+	elseif s == 'up' then
+		repeat
+			currentOrder = (currentOrder - 1) % module.orderCount
+			currentPattern = module.order[currentOrder]
+		until currentPattern < 254
+		currentRow = 0
+		currentTick = 0
+		patternInvalidated = true
+	elseif s == 'down' then
+		repeat
+			currentOrder = (currentOrder + 1) % module.orderCount
+			currentPattern = module.order[currentOrder]
+		until currentPattern < 254
+		currentRow = 0
+		currentTick = 0
+		patternInvalidated = true
+	elseif s == 'w' then
+		tempo = math.max(32, tempo - 1)
+	elseif s == 's' then
+		tempo = math.min(255, tempo + 1)
+	elseif s == 'a' then
+		speed = math.max(1, speed - 1)
+	elseif s == 'd' then
+		speed = math.min(255, speed + 1)
+	elseif s == 'space' then
+		smoothScrolling = not smoothScrolling
+	end
 end
 
 --------------

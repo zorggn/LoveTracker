@@ -122,3 +122,9 @@ love.draw = function()
 		routine.draw()
 	end
 end
+
+love.keypressed = function(...)
+	if routine then
+		routine.keypressed(...)
+	end
+end
