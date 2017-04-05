@@ -73,7 +73,8 @@ local RANDOMTABLE = {}
 	for i = 0, 63 do RANDOMTABLE[i] = love.math.random(0, 255) end
 
 local WAVEFORMTABLE = {
-	[0] = SINETABLE, RAMPDOWNTABLE, SQUARETABLE, RANDOMTABLE}
+	[0] = SINETABLE, RAMPDOWNTABLE, SQUARETABLE, RANDOMTABLE,
+	      SINETABLE, RAMPDOWNTABLE, SQUARETABLE, RANDOMTABLE}
 
 local RETRIGVOLSLIDEFUNC = {
 	  [0] = function(v) return v end,
@@ -613,11 +614,9 @@ Voice.process = function(v, currentTick)
 		elseif C == 'H' then
 			-- Vibrato
 			local pos = v.vibratoOffset - 32 -- [0,63] -> [-32,31]
-			local wf = v.vibratoWaveform % 4
 			local speed = math.floor(v.fxSlotVibrato / 0x10)
 			local depth = v.fxSlotVibrato % 0x10
-			local index = v.vibratoOffset
-			local delta = WAVEFORMTABLE[wf][index]
+			local delta = WAVEFORMTABLE[v.vibratoWaveform][v.vibratoOffset]
 			--delta = delta * depth
 			--delta = delta / 128
 			--delta = delta * 4 -- Fine vibrato is the unmultiplied one
@@ -644,11 +643,9 @@ Voice.process = function(v, currentTick)
 		elseif C == 'K' then
 			-- Vibrato
 			local pos = v.vibratoOffset - 32 -- [0,63] -> [-32,31]
-			local wf = v.vibratoWaveform % 4
 			local speed = math.floor(v.fxSlotVibrato / 0x10)
 			local depth = v.fxSlotVibrato % 0x10
-			local index = v.vibratoOffset
-			local delta = WAVEFORMTABLE[wf][index]
+			local delta = WAVEFORMTABLE[v.vibratoWaveform][v.vibratoOffset]
 			--delta = delta * depth
 			--delta = delta / 128
 			--delta = delta * 4 -- Fine vibrato is the unmultiplied one
@@ -727,11 +724,9 @@ Voice.process = function(v, currentTick)
 		elseif C == 'R' then
 			-- Tremolo
 			local pos = math.abs(v.tremoloOffset) - 32 -- [0,63] -> [-32,31]
-			local wf = v.tremoloWaveform % 4
 			local speed = math.floor(v.fxSlotGeneric / 0x10)
 			local depth = v.fxSlotGeneric % 0x10
-			local index = v.tremoloOffset
-			local delta = WAVEFORMTABLE[wf][index]
+			local delta = WAVEFORMTABLE[v.tremoloWaveform][v.tremoloOffset]
 			--delta = delta * depth
 			--delta = delta / 64
 			--delta = delta * 4
@@ -816,11 +811,9 @@ Voice.process = function(v, currentTick)
 		elseif C == 'U' then
 			-- Fine Vibrato
 			local pos = v.vibratoOffset - 32 -- [0,63] -> [-32,31]
-			local wf = v.vibratoWaveform % 4
 			local speed = math.floor(v.fxSlotVibrato / 0x10)
 			local depth = v.fxSlotVibrato % 0x10
-			local index = v.vibratoOffset
-			local delta = WAVEFORMTABLE[wf][index]
+			local delta = WAVEFORMTABLE[v.vibratoWaveform][v.vibratoOffset]
 			--delta = delta * depth
 			--delta = delta / 128
 			--delta = delta * 1
