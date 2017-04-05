@@ -70,9 +70,6 @@ local SQUARETABLE = {
 	      255, 255, 255, 255, 255, 255, 255, 255}
 
 local RANDOMTABLE = {}
-	-- This is probably not how the random waveform is implemented...
-	-- probably means to select one of the above 3 randomly...
-	-- TODO: Figure it out.
 	for i = 0, 63 do RANDOMTABLE[i] = love.math.random(0, 255) end
 
 local WAVEFORMTABLE = {
