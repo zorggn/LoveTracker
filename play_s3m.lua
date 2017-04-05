@@ -638,8 +638,10 @@ Voice.process = function(v, currentTick)
 			end
 		elseif C == 'J' then
 			-- Arpeggio
-			v.arpIndex = currentTick % 3
-			v:setPeriod(math.min(v.lastNote + v.arpOffset[v.arpIndex], 131))
+			-- The below code is how the effect would work if ST3/S3M didn't
+			-- use a constant 50Hz rate for the effect.
+			--v.arpIndex = currentTick % 3
+			--v:setPeriod(math.min(v.lastNote + v.arpOffset[v.arpIndex], 131))
 		elseif C == 'K' then
 			-- Vibrato
 			local pos = v.vibratoOffset - 32 -- [0,63] -> [-32,31]
@@ -840,6 +842,10 @@ Voice.render = function(v)
 		-- Sampler.
 		local freq
 
+		-- ST3 Arpeggio
+		v.arpIndex = (v.arpIndex + ARPEGGIOPERIOD) % 3
+		v:setPeriod(math.min(v.lastNote + v.arpOffset[v.arpIndex], 131))
+		
 		if v.c == 0x08 then -- vibrato
 			freq = v.instPeriod + v.vibratoFreqDelta
 		else
