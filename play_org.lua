@@ -509,7 +509,7 @@ do
 		'1','2','3','4','5','6','7','8','q','w','e','r','t','y','u','i'
 	}
 	local ivoices = {}; for i=1,#voices do ivoices[voices[i]] = i end
-	love.keypressed = function(k,s)
+	routine.keypressed = function(k,s)
 		if ivoices[s] then
 			voice[ivoices[s]-1].muted = not voice[ivoices[s]-1].muted
 		end
