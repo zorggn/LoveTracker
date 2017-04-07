@@ -1272,7 +1272,7 @@ routine.render = function(dt)
 		buffer.offset = buffer.offset + 2
 		if buffer.offset >= buffer.data:getSampleCount() *
 			buffer.data:getChannels()
-			then
+		then
 			buffer.offset = 0
 			source.queue:queue(buffer.data)
 			source.queue:play()
