@@ -281,21 +281,6 @@ Voice.process = function(v, currentTick)
 	Dy =            D % 16
 
 
-	-- Note Cut processed regardless of Effect Slot.
-	-- This method accomplishes the following: On T0 of the row where the note
-	-- cut is set, this code won't run, since setting the value happens later;
-	-- however, after that, if the value is greater or equal to the speed, then
-	-- this will overflow into the next row, which may or may not be correct
-	-- for modules.
-	-- Note that if we didn't want to support cut-tick-overflow, then putting
-	-- this code into a TN SCx effect handler would work perfectly.
-	--if v.noteCutTicks > 0 then
-	--	v.noteCutTicks = v.noteCutTicks - 1
-	--	if v.noteCutTicks == 0 then
-	--		v.currVolume = 0.0
-	--	end
-	--end
-
 
 	-- Early note delay detection...
 	if currentTick == 0 then
@@ -541,7 +526,7 @@ Voice.process = function(v, currentTick)
 			elseif x == 0xC then
 				-- Note Cut
 				local y = D % 0x10
-				-- No % -> cut may happen across rows which is probably wrong.
+				-- No % -> cut may happen across rows, which is probably wrong.
 				v.noteCutTicks = y % speed
 			elseif x == 0xD then
 				-- The setter part of this needs to be handled before handling
