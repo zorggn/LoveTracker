@@ -1103,7 +1103,6 @@ routine.step = function()
 			if currentOrder + 1 < module.orderCount then
 				currentOrder   = currentOrder + 1
 				currentPattern = module.order[currentOrder]
-				patternInvalidated = true
 			else
 				currentOrder   = 0 -- No song restart marker in s3m.
 				currentPattern = module.order[currentOrder]
@@ -1113,6 +1112,7 @@ routine.step = function()
 				loopRow[ch] = 0
 				loopCnt[ch] = 0 
 			end
+			patternInvalidated = true
 		end
 	end
 	-- Loop handling
