@@ -424,7 +424,9 @@ routine.render = function(dt)
 
 		-- Advance buffer position, if it's full, queue it and reset buffer.
 		buffer.offset = buffer.offset + 2
-		if buffer.offset >= buffer.data:getSampleCount() * 2.0 then
+		if buffer.offset >= buffer.data:getSampleCount() *
+			buffer.data:getChannels()
+		then
 			buffer.offset = 0
 			source.queue:queue(buffer.data)
 			source.queue:play()
