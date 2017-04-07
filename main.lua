@@ -92,8 +92,7 @@ function love.filedropped(file)
 
 	-- Init playroutine with one fitting the module.
 	if module then
-		routine = require("play_" .. module.fileType)
-
+		routine = love.filesystem.load("play_" .. module.fileType .. ".lua")()
 		-- Play the module.
 		routine.load(module)
 	end
