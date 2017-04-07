@@ -81,7 +81,7 @@ function love.filedropped(file)
 	-- Stop playback; Unload previous data.
 	if routine and routine.playing then
 		love.audio.stop()
-		routine = nil 
+		routine = nil
 	end
 	if module then
 		module = nil
