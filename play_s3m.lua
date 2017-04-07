@@ -820,7 +820,6 @@ Voice.process = function(v, currentTick)
 			--delta = delta / 128
 			--delta = delta * 1
 			delta = delta * depth / 128
-			print(pos, wf, speed, depth, index, delta)
 			if pos < 0 then
 				v.vibratoFreqDelta = -delta
 			else
