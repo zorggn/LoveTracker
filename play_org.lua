@@ -99,8 +99,9 @@ end
 Voice.setLength = function(v, len)
 	-- Don't process continuations if the previous note wasn't as long...
 	if v.pitch == 0xFF then return end
+		v.length = len
 		if v.pizzicato == 0 then
-			v.ticksLeft = len -- ticks
+			v.ticksLeft = len+1 -- ticks
 		else
 			v.ticksLeft = PIZZICATO(v.octave) -- samplepoints
 		end
@@ -328,7 +329,7 @@ routine.process = function()
 			if event and event.position == currentTick then
 				voice.position = event.position
 				voice:setPitch(event.pitch)
-				voice:setLength(event.length+1) -- TODO: Test if this is ok...
+				voice:setLength(event.length)
 				voice:setVolume(event.volume)
 				voice:setPanning(event.panning)
 				voice.currentEvent = voice.currentEvent + 1
