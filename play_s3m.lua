@@ -296,7 +296,28 @@ Voice.process = function(v, currentTick)
 	--	end
 	--end
 
-	if currentTick == 0 and v.noteDelayTicks == 0 then
+
+	-- Early note delay detection...
+	if currentTick == 0 then
+		local x = math.floor(D / 0x10)
+		if C == 'S' and x == 0xD then
+			-- Note Delay
+			local y = D % 0x10
+			-- No % -> delay may happen across rows, which is probably wrong.
+			v.noteDelayTicks = y % speed
+			v.noteDelayTrigger = true
+		elseif v.noteDelayTicks > 0 then
+			-- Reset delay ticks since it was more than the speed value.
+			-- Removing this needed to allow delays across rows, as said above.
+			v.noteDelayTicks = 0
+			v.noteDelayTrigger = false
+		end
+	end
+
+
+	if  (not v.noteDelayTrigger and currentTick      == 0) or
+		(    v.noteDelayTrigger and v.noteDelayTicks == 0) then
+		v.noteDelayTrigger = false
 		-- Combinatorics...
 		if         N and     I then
 			-- Apply instrument
@@ -523,10 +544,13 @@ Voice.process = function(v, currentTick)
 				-- No % -> cut may happen across rows which is probably wrong.
 				v.noteCutTicks = y % speed
 			elseif x == 0xD then
+				-- The setter part of this needs to be handled before handling
+				-- the note/instrument/volume columns, AND it needs to be
+				-- processed on the 0th tick too, because of the code written.
 				-- Note Delay
-				local y = D % 0x10
-				-- No % -> delay may happen across rows which is probably wrong.
-				v.noteDelayTicks = y % speed
+				if v.noteDelayTicks > 0 then
+					v.noteDelayTicks = v.noteDelayTicks - 1
+				end
 			elseif x == 0xF then
 				-- Invert Loop OR Funk Repeat
 				-- Thing is, there are a few possibilities here;
@@ -753,61 +777,8 @@ Voice.process = function(v, currentTick)
 				end
 			elseif x == 0xD then
 				-- Note Delay
-				-- This code only works for the case whe
-				-- noteDelayTicks <= speed
 				if v.noteDelayTicks > 0 then
 					v.noteDelayTicks = v.noteDelayTicks - 1
-					if noteDelayTicks == 0 then
-						-- Combinatorics...
-						if         N and     I then
-							-- Apply instrument
-							v.instrument = module.sample[I]
-							if C ~= 'G' then
-								-- Set note and reset offset to 0.
-								v:setPeriod(N)
-								v.currOffset = 0
-							end
-							-- Handle volume
-							if V then
-								v.currVolume = V / 0x40
-							else
-								if v.instrument and v.instrument.volume then
-									v.currVolume = v.instrument.volume / 0x40
-								end
-							end
-						elseif     N and not I then
-							if C ~= 'G' then
-								-- Set note and reset offset to 0.
-								v:setPeriod(N)
-								v.currOffset = 0
-							end
-							-- Handle volume
-							if V then
-								v.currVolume = V / 0x40
-							else
-								-- Do nothing here.
-							end
-						elseif not N and     I then
-							-- Apply instrument
-							v.instrument = module.sample[I]
-							-- Handle volume
-							if V then
-								v.currVolume = V / 0x40
-							else
-								if v.instrument then
-									v.currVolume = v.instrument.volume / 0x40
-								end
-							end
-						elseif not N and not I then
-							-- Handle volume
-							if V then
-								v.currVolume = V / 0x40
-							else
-								-- Do nothing here.
-							end
-						end
-						if N then v.lastNote = N end
-					end
 				end
 			end
 		elseif C == 'U' then
@@ -953,6 +924,7 @@ Voice.new = function(ch, pan)
 	-- Faster calculation
 	v.noteDelayTicks   = 0x0    -- Ticks to delay note onsets.
 	v.noteCutTicks     = 0x0    -- Ticks to cut note sound after.
+	v.noteDelayTrigger = false  -- Internal helper.
 
 	v.arpIndex         = 0x0    -- Running index for arpeggio effect.
 	v.arpOffset        = {}
