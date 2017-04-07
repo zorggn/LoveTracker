@@ -1068,8 +1068,9 @@ routine.process = function()
 				elseif string.char(cell.effectCommand + 0x40) == 'S' and
 					math.floor(cell.effectData/16) == 0xE then
 						-- Pattern Delay
-						local x = cell.effectData%16
-						patternDelay = x
+						local x = cell.effectData % 0x10
+						-- This works in rows, not ticks!
+						patternDelay = x * speed
 				elseif string.char(cell.effectCommand + 0x40) == 'V' then
 					-- Global Volume
 					if cell.effectData <= 0x40 then
