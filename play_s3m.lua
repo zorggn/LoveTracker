@@ -843,10 +843,15 @@ Voice.render = function(v)
 		local freq
 
 		-- ST3 Arpeggio
-		v.arpIndex = (v.arpIndex + ARPEGGIOPERIOD) % 3
-		v:setPeriod(math.min(v.lastNote + v.arpOffset[v.arpIndex], 131))
-		
-		if v.c == 0x08 then -- vibrato
+		if v.c == 0x0A then
+			v.arpIndex = (v.arpIndex + (samplingPeriod / ARPEGGIOPERIOD)) % 3
+			v:setPeriod(
+				math.min(v.arpOffset[math.floor(v.arpIndex)] + v.lastNote,
+				131))
+		end
+
+		-- Vibrato
+		if v.c == 0x08 then
 			freq = v.instPeriod + v.vibratoFreqDelta
 		else
 			freq = v.instPeriod
