@@ -497,6 +497,7 @@ Voice.process = function(v, currentTick)
 				-- Set FineTune
 				-- TODO: This seemingly destroys any other previous value for
 				--       c4speed; check if this is actually how it should work.
+				-- IDEA: Maybe modify the base c4speed instead?
 				if v.instrument then
 					v.instrument.c4speed = C4SPEEDFINETUNES[D % 0x10]
 				end
