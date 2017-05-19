@@ -7,11 +7,49 @@ local log = require('log')
 -- Need this since we want to iterate over loaders only once, if a file
 -- extension is not recognized.
 local loader = {
-	--['mod'] = require('load_mod'),
-	['s3m'] = require('load_s3m'),
-	--['xm']  = require('load_xm'),
-	--['it']  = require('load_it'),
-	['org'] = require('load_org')
+	['load_mod'] = require('load_mod'),
+	['load_s3m'] = require('load_s3m'),
+	--['load_xm']  = require('load_xm'),
+	--['load_it']  = require('load_it'),
+	['load_org'] = require('load_org'),
+	['load_hvl'] = require('load_hvl'),
+}
+
+-- List of the supported file extensions and loader assignments to them.
+-- Note that some module formats may share extensions, but those are dealt with
+-- in the loaders.
+local extension = {
+	-- Ultimate Soundtracker (m15 subtype)
+	-- Soundtracker
+	-- Master Soundtracker
+	-- Protracker
+	-- Noisetracker
+	-- FastTracker (ft subtype)
+	-- Falcon StarTrekker
+	-- TakeTracker
+	-- Grave Composer / Mod's Grave (wow subtype)
+	['mod']  = 'load_mod',
+	['ft']   = 'load_mod',
+	['wow']  = 'load_mod',
+
+	-- Scream Tracker III
+	['as3m'] = 'load_s3m',
+	['s3m']  = 'load_s3m',
+
+	-- Fast Tracker II
+	--['xm']  = 'load_xm',
+
+	-- Impulse Tracker
+	--['it']  = 'load_it',
+
+	-- Organya
+	['org']  = 'load_org',
+
+	-- Abyss' Highest Experience (back-compatibility)
+	-- Hively Tracker
+	['ahx']  = 'load_hvl',
+	['thx']  = 'load_hvl',
+	['hvl']  = 'load_hvl',
 }
 
 -- The loader
@@ -39,11 +77,11 @@ local load_module = function(file)
 	-- worked, then try all module loaders, and if it's still not detected,
 	-- only then return with failure.
 
-	if not loaded and loader[antePunct] then
+	if not loaded and extension[antePunct] then
 		-- Extension before the dot, Amiga usage.
-		loaded, errmsg = loader[antePunct](file)
+		loaded, errmsg = loader[extension[antePunct]](file)
 		if loaded then
-			loaded.fileType = antePunct
+			loaded.fileExt = antePunct
 			log("Found Amiga module with extension '%s' (%s).\n", antePunct,
 				loaded.moduleType)
 		else
@@ -51,11 +89,11 @@ local load_module = function(file)
 		end
 	end
 
-	if not loaded and loader[postPunct] then
+	if not loaded and extension[postPunct] then
 		-- Extension after the dot, PC usage.
-		loaded, errmsg = loader[postPunct](file)
+		loaded, errmsg = loader[extension[postPunct]](file)
 		if loaded then
-			loaded.fileType = postPunct
+			loaded.fileExt = postPunct
 			log("Found PC module with extension '%s' (%s).\n", postPunct,
 				loaded.moduleType)
 		else
@@ -68,10 +106,10 @@ local load_module = function(file)
 
 	-- Try all of the loaders as a last resort, maybe we'll find a match...
 	if not loaded then
-		for ext, fun in pairs(loader) do
+		for ldr, fun in pairs(loader) do
 			loaded, errmsg = fun(file)
 			if loaded then
-				loaded.fileType = ext
+				loaded.fileExt = loaded.fileType
 				log("Extension mismatch, but recognized file as '%s' anyway." ..
 					"(%s)\n", ext, loaded.moduleType)
 				break
