@@ -7,6 +7,15 @@
 --       internal representation of the loaded modules; the playroutine itself
 --       doesn't bork on such things, and they get shown graphically as such.
 
+
+
+--[[ TODO: Check implementation against the following ones:
+	https://source.openmpt.org/svn/openmpt/trunk/OpenMPT/soundlib/Load_s3m.cpp
+	https://github.com/schismtracker/schismtracker/blob/master/fmt/s3m.c#L1013
+--]]
+
+
+
 --[[
 	Structure definition:
 		title                      - string[27+1]
