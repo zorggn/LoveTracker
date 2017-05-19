@@ -124,6 +124,9 @@ local load_s3m = function(file)
 	local structure = {}
 	file:open('r')
 
+	-- This is the universe having a giggle.
+	local isPixPlay = false
+
 	--[[Header]]--
 
 	file:seek(44)
@@ -701,6 +704,26 @@ local load_s3m = function(file)
 								util.bin2num(packedData:sub(ptr+1,ptr+1))
 							cell.effectData =
 								util.bin2num(packedData:sub(ptr+2,ptr+2))
+
+							--[[ Quoting the OpenMPT source verbatim:
+Try to find out if Zxx commands are supposed to be panning commands (PixPlay).
+Actually I am only aware of one module that uses this panning style, namely
+"Crawling Despair" by $volkraq and I have no idea what PixPlay is, so this code
+is solely based on the sample text of that module. We won't convert if there
+are not enough Zxx commands, too "high" Zxx commands or there are only "left"
+or "right" pannings (we assume that stereo should be somewhat balanced), and
+modules not made with an old version of ST3 were probably made in a tracker
+that supports panning anyway. --]]
+							-- Besides, we don't support OpenMPT additions to
+							-- modules anyway, so Zxx can only be PixPlay
+							-- 16-valued panning, and not MIDI macros or stuff.
+							if cell.effectCommand == 26 and
+								cell.effectData < 0x10 then
+									isPixPlay = true
+									-- Convert to S8x
+									cell.effectCommand = 19
+									cell.effectData = cell.effectData + 0x80
+							end
 						end
 						ptr = ptr + 2
 					end
@@ -774,8 +797,12 @@ local load_s3m = function(file)
 
 	--[[Finalization]]--
 
-	structure.moduleType = ("Scream Tracker 3 v%s"):format(
-		structure.version)
+	if isPixPlay then
+		structure.moduleType = ("PixPlay (CRAWLING.S3M)")
+	else
+		structure.moduleType = ("Scream Tracker 3 v%s"):format(
+			structure.version)
+	end
 	structure.fileType = 's3m'
 
 	log("-- /Scream Tracker 3 S3M loader/ --\n\n")
