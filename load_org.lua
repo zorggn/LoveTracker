@@ -191,6 +191,8 @@ local load_org = function(file)
 
 
 	structure.moduleType = ("Organya Org-%0.2d"):format(structure.version)
+	structure.fileType = 'org'
+
 	log("\n\n-- /Organya ORG loader/ --\n\n")
 	return structure
 end

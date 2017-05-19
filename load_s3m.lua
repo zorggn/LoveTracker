@@ -767,6 +767,8 @@ local load_s3m = function(file)
 
 	structure.moduleType = ("Scream Tracker 3 v%s"):format(
 		structure.version)
+	structure.fileType = 's3m'
+
 	log("-- /Scream Tracker 3 S3M loader/ --\n\n")
 	return structure
 end
