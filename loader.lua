@@ -20,25 +20,31 @@ local load_module = function(file)
 	local loaded = false
 	local errmsg = false
 
-	-- Separate path, name, extension from filename; though it may be path, extension, name instead (amiga).
-	local _, antePunct, postPunct = file:getFilename():match("(.-)([^\\/]-%.?([^%.\\/]*))$")
+	-- Separate path, name, extension from filename; though it may be path,
+	-- extension, name instead (amiga).
+	local _, antePunct, postPunct = file:getFilename():match(
+		"(.-)([^\\/]-%.?([^%.\\/]*))$")
 	antePunct = antePunct:match("(.+)%..*")
 	-- Fix case.
 	antePunct, postPunct = string.lower(antePunct), string.lower(postPunct)
 
-	log("Path: '%s' Former half: '%s' Latter half: '%s'\n", _, antePunct, postPunct)
+	log("Path: '%s' Former half: '%s' Latter half: '%s'\n", _, antePunct,
+		postPunct)
 
-	-- Differentiating between tracker module filetypes, by magic (deep or arcane) or otherwise.
-	-- The short version: Try loading the passed file with a loader defined by the extension that may exist on either
-	-- end of the filename; if neither worked, then try all module loaders, and if it's still not detected, only then
-	-- return with failure.
+	-- Differentiating between tracker module filetypes, by magic
+	-- (deep or arcane) or otherwise.
+	-- The short version: Try loading the passed file with a loader defined by
+	-- the extension that may exist on either end of the filename; if neither
+	-- worked, then try all module loaders, and if it's still not detected,
+	-- only then return with failure.
 
 	if not loaded and loader[antePunct] then
 		-- Extension before the dot, Amiga usage.
 		loaded, errmsg = loader[antePunct](file)
 		if loaded then
 			loaded.fileType = antePunct
-			log("Found Amiga module with extension '%s' (%s).\n", antePunct, loaded.moduleType)
+			log("Found Amiga module with extension '%s' (%s).\n", antePunct,
+				loaded.moduleType)
 		else
 			log("An error was encountered: %s\n", errmsg)
 		end
@@ -49,14 +55,15 @@ local load_module = function(file)
 		loaded, errmsg = loader[postPunct](file)
 		if loaded then
 			loaded.fileType = postPunct
-			log("Found PC module with extension '%s' (%s).\n", postPunct, loaded.moduleType)
+			log("Found PC module with extension '%s' (%s).\n", postPunct,
+				loaded.moduleType)
 		else
 			log("An error was encountered: %s\n", errmsg)
 		end
 	end
 
-	-- The above ensures that even if a module is called something stupid like "mod.s3m", it will try to parse it
-	-- both ways.
+	-- The above ensures that even if a module is called something stupid like
+	-- "mod.s3m", it will try to parse it both ways.
 
 	-- Try all of the loaders as a last resort, maybe we'll find a match...
 	if not loaded then
@@ -64,7 +71,8 @@ local load_module = function(file)
 			loaded, errmsg = fun(file)
 			if loaded then
 				loaded.fileType = ext
-				log("Extension mismatch, but recognized file as '%s' anyway. (%s)\n", ext, loaded.moduleType)
+				log("Extension mismatch, but recognized file as '%s' anyway." ..
+					"(%s)\n", ext, loaded.moduleType)
 				break
 			else
 				log("An error was encountered: %s\n", errmsg)
@@ -73,7 +81,9 @@ local load_module = function(file)
 	end
 
 	-- Well shit.
-	if not loaded then log("Couldn't load file; is it a tracker module?\n") end
+	if not loaded then
+		log("Couldn't load file; is it a supported tracker module?\n")
+	end
 
 	return loaded
 end
