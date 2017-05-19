@@ -3,8 +3,9 @@
 
 local log = require('log')
 
--- List of the supported file extensions and assigned loaders.
--- Note that some module formats may share extensions, but those are dealt with in the loaders.
+-- List of loaders.
+-- Need this since we want to iterate over loaders only once, if a file
+-- extension is not recognized.
 local loader = {
 	--['mod'] = require('load_mod'),
 	['s3m'] = require('load_s3m'),
