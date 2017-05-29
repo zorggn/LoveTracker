@@ -296,7 +296,8 @@ local load_hvl = function(file)
 			if validTrackCommands[row.command] then
 				if     row.command == 0x0 then
 					if row.param > 0x09 then
-						return false, errorString[10]
+						-- Cactoos' 2 worki za malo has 090...
+						--return false, errorString[10]
 					else
 						-- Needed for command 0xB check.
 						param0 = row.param
@@ -305,20 +306,22 @@ local load_hvl = function(file)
 					-- Electric City also contradicts the spec here,
 					-- by using a 440 and a 400.
 					if structure.id == 0 then
-						return false, errorString[11]
-					elseif (row.param > 0x7F) or
-						(row.param > 0x3F and row.param < 0x40) then
-						return false, errorString[12]
+						--return false, errorString[11]
+					--elseif (row.param > 0x7F) or
+					-- Cactoos' 2 worki za malo has 4E0...
+					--	(row.param > 0x3F and row.param < 0x40) then
+					--	return false, errorString[12]
 					end
 				elseif row.command == 0x9 then
 					if row.param > 0x3F then
-						return false, errorString[13]
+						--return false, errorString[13]
 					end
 				elseif row.command == 0xC then
 					if (row.param > 0x40 and row.param < 0x50) or
 						(row.param > 0x90 and row.param < 0xA0) or
 						(row.param > 0xE0) then
-						return false, errorString[14]
+						-- Plastic Fools by Pink/Abyss has CEF...
+						--return false, errorString[14]
 					end
 				elseif row.command == 0xE then
 					-- This seems to be wrong in the spec... or
@@ -329,23 +332,23 @@ local load_hvl = function(file)
 					--end
 				elseif row.command == 0xD then
 					if structure.id == 0 and row.param ~= 0x00 then
-						return false, errorString[16]
+						--return false, errorString[16]
 					else
 						local hi = math.floor(row.param / 0x10)
 						local lo =            row.param % 0x10
 						if hi > 9 or lo > 9 then
-							return false, errorString[17]
+							--return false, errorString[17]
 						elseif hi*10+lo >= structure.rowCount then
-							return false, errorString[18]
+							--return false, errorString[18]
 						end
 					end
 				elseif row.command == 0xB then
 					local hi = math.floor(row.param / 0x10)
 					local lo =            row.param % 0x10
 					if hi > 9 or lo > 9 then
-						return false, errorString[19]
+						--return false, errorString[19]
 					elseif param0*100+hi*10+lo >= structure.trackCount then
-						return false, errorString[20]
+						--return false, errorString[20]
 					end
 					-- reset the saved 0x0 command parameter.
 					param0 = 0
