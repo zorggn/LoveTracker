@@ -791,6 +791,8 @@ that supports panning anyway. --]]
 					end
 				end
 				log("Loaded.\n")
+			else
+				log("Was empty.\n")
 			end
 		end
 	end
