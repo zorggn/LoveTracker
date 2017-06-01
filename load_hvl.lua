@@ -141,7 +141,8 @@ local load_hvl = function(file)
 
 	v, n = file:read(1); if n ~= 1 then return false, errorString[1] end
 	local temp = math.floor(string.byte(v) / 0x10)
-	local zerothTrackSaved = (math.floor(temp / 0x8) ~= 0)
+	-- If bit is set, then the 0th track is not saved, the spec is wrong.
+	local zerothTrackSaved = (math.floor(temp / 0x8) == 0)
 	structure.speed = temp % 0x8 -- CIA timing multiplier, values 0-3 are valid.
 	log("Zeroth track %s.\n", (zerothTrackSaved and 'saved' or 'not saved'))
 	log("CIA multiplier: %dx (%d Hz)\n", (2 ^ structure.speed),
@@ -264,8 +265,7 @@ local load_hvl = function(file)
 
 	log("Tracks:\n")
 
-	-- This still feels wrong, but meh.
-	for i = 0, structure.trackCount - (zerothTrackSaved and 1 or 0) do
+	for i = 0, structure.trackCount - (zerothTrackSaved and 0 or 1) do
 		local track = {}
 		log("    Track %03d:\n", i)
 		for j = 0, structure.rowCount - 1 do
