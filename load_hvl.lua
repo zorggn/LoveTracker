@@ -90,6 +90,7 @@ local errorString = {
 	--[[M]] "Early end-of-file in instrument list.",
 	--[[N]] "Early end-of-file in instrument's playlist.",
 	--[[O]] "Early end-of-file in names list.",
+	--[[P]] "Illegal character found in names list.",
 }
 
 local acceptedID = {
@@ -508,11 +509,16 @@ local load_hvl = function(file)
 	log('Comment list:\n')
 
 	-- TODO: validate chars (0,[32-126],[128-255])
+	local pattern = '[^%z\32-\126\128-\255]'
+
 	for i = 0, structure.instrumentCount do
 		local text = {}
 
 		while true do
 			v,n = file:read(1); if n ~= 1 then return false,errorString[24] end
+			if string.find(v, pattern) then
+				return false, errorString[25]
+			end
 			text[#text+1] = v
 			if v == '\0' then break end
 		end
