@@ -1,5 +1,7 @@
-A module player (for now) written with the LÖVE framework.
+﻿A module player (for now) written with the LÖVE framework.
 ----------------------------------------------------------
+
+![Here would be an image of the interface...](lovetracker.png "s3m interface")
 
 No versions, use the commit history to keep track. :V
 
