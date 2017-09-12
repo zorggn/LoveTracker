@@ -177,7 +177,7 @@ Voice.render = function(v)
 	end
 
 	-- Adjust volume and panning
-	smp  = smp * v.amplitude * (v.type == 'melodic' and 0.20 or 1.0)
+	smp  = smp * v.amplitude
 	return smp * v.balanceL, smp * v.balanceR
 end
 
