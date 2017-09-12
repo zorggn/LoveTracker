@@ -229,9 +229,11 @@ Voice.new = function(type, instrument, finetune, pizzicato)
 		)
 		local smp = 0
 		for c in buffer:gmatch('.') do
-			-- Signed?
-			local b = (127 - string.byte(c))/128
-			--local b = (string:byte(c) - 127)/128
+			local b
+			-- Convert from signed (two's complement).
+			b = string.byte(c)
+			b = b > 127 and -(256-b) or b
+			b = b/256
 			v.data:setSample(smp, b)
 			smp = smp + 1
 		end
@@ -259,9 +261,11 @@ Voice.new = function(type, instrument, finetune, pizzicato)
 			)
 			local smp = 0
 			for c in buffer:gmatch('.') do
-				-- Unsigned?
-				local b = (string.byte(c) - 127)/128
-				--local b = (127 - string:byte(c))/128
+				local b
+				-- Convert from unsigned.
+				b = string.byte(c)
+				b = b - 127
+				b = b/128
 				v.data:setSample(smp, b)
 				smp = smp + 1
 			end
