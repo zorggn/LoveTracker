@@ -87,9 +87,16 @@ Voice.setPitch = function(v, pitch)
 	if v.pitch < 0xFF then -- else no change
 		v.pitchClass = (v.pitch % 12)+1
 		v.octave     = math.floor(v.pitch / 12)+1
-		v.frequency  = (pitchClass[v.pitchClass] + (v.finetune - 1000)) /
-			PERIODSIZE[v.octave]
-		if not v.type == 'melodic' then
+		if v.type == 'melodic' then
+			v.frequency = (pitchClass[v.pitchClass] + (v.finetune - 1000)) /
+				PERIODSIZE[v.octave]
+		else
+			-- Percussives use linear frequency.
+			-- 22050 is the sampling rate for pxt.
+			-- 32.5 is most probably the lowest frequency supported.
+			-- Also explains why a pitch of 0x00 doesn't play, since we have 0 in the numerator.
+			v.frequency = v.pitch * (22050/32.5) / device.samplingRate
+
 			-- Re-trigger percussive voices.
 			v.currentOffset = 0
 		end
@@ -127,13 +134,13 @@ Voice.render = function(v)
 	-- When not to do anything.
 	if v.disabled then return 0.0, 0.0 end
 	if v.frequency == 0 or v.octave == 0 then return 0.0, 0.0 end
-	if v.ticksLeft == 0 then
-		if v.type == 'melodic' then
+	if v.type == 'melodic' then
+		if v.ticksLeft == 0 then
 			return 0.0, 0.0
-		else
-			if v.currentOffset == 0 then
-				return 0.0, 0.0
-			end
+		end
+	else 
+		if v.currentOffset >= math.huge then
+			return 0.0, 0.0
 		end
 	end
 
@@ -157,16 +164,14 @@ Voice.render = function(v)
 			v.data:getSampleCount()
 			v.offsetAccumulator = v.offsetAccumulator - 1
 		end
-	else
-		v.offsetAccumulator = v.offsetAccumulator +
-			(((v.frequency/2) * PERIODSIZE[v.octave]) / device.samplingRate) *
-			(1 / SMPMULTIPLIER[v.octave])
+	else -- 'percussive'
+		v.offsetAccumulator = v.offsetAccumulator + v.frequency
 		while v.offsetAccumulator >= 1 do
-			v.currentOffset = (v.currentOffset + SMPINCREMENT[v.octave])
+			v.currentOffset = (v.currentOffset + 1)
 			v.offsetAccumulator = v.offsetAccumulator - 1
 		end
 		if v.currentOffset >= v.data:getSampleCount() then
-			v.currentOffset = 0
+			v.currentOffset = math.huge
 			v.ticksLeft = 0 -- drums are one-shot.
 		end
 	end
