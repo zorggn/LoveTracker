@@ -477,11 +477,14 @@ local load_hvl = function(file)
 
 			v,n = file:read(2); if n ~= 2 then return false,errorString[23] end
 			v = util.bin2num(v, 'BE')
-			entry.command0  =  math.floor(v / 0x2000)
-			entry.command1  =  math.floor(v / 0x400 ) % 0x8
+			--log("Instrument " .. j .. ": " .. ('%04X'):format(v)) log('\t\t')
+			entry.command1  =  math.floor(v / 0x2000)
+			entry.command0  =  math.floor(v / 0x400 ) % 0x8
 			entry.waveform  =  math.floor(v / 0x80  ) % 0x8
-			entry.fixedNote = (math.floor(v / 0x40  ) % 0x1) == 1
+			entry.fixedNote =  bit.band(math.floor(v / 0x40  ), 0x1) == 1
 			entry.note      =             v % 0x40
+			--log("\tfixed: " .. entry.fixedNote .. "\tnote: " .. entry.note)
+			--log('\n\t\t')
 
 			v,n = file:read(1); if n ~= 1 then return false,errorString[23] end
 			entry.data0 = string.byte(v)
