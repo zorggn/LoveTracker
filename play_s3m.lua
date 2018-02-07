@@ -1,6 +1,8 @@
 -- Scream Tracker 3 "S3M" playroutine
 -- by zorg @ 2017 § ISC
 
+-- TODO: Scream Tracker mentions a Xxx command that mapped to an amiga 8xx command, that's not used...
+
 -- Note: To keep things compact, everything not generic enough to be used by
 --       other playroutines are kept inside the respective play_*.lua files,
 --       a.k.a. these ones.
@@ -76,6 +78,7 @@ local WAVEFORMTABLE = {
 	[0] = SINETABLE, RAMPDOWNTABLE, SQUARETABLE, RANDOMTABLE,
 	      SINETABLE, RAMPDOWNTABLE, SQUARETABLE, RANDOMTABLE}
 
+-- TODO: Test how scream tracker implemented the 8th type (?).
 local RETRIGVOLSLIDEFUNC = {
 	  [0] = function(v) return v end,
 	--[[1]] function(v) return v -  1 end,
@@ -503,14 +506,14 @@ Voice.process = function(v, currentTick)
 				end
 			elseif x == 0x3 then
 				-- Set Vibrato Waveform
-				-- TODO: See if this is global or per-channel
+				-- TODO: See if this is global or per-channel - seems to be per-channel.
 				local y = D % 0x10
 				if y < 8 then
 					v.vibratoWaveform = y
 				end
 			elseif x == 0x4 then
 				-- Set Tremolo Waveform
-				-- TODO: See if this is global or per-channel
+				-- TODO: See if this is global or per-channel - seems to be per-channel.
 				local y = D % 0x10
 				if y < 8 then
 					v.tremoloWaveform = y
@@ -520,7 +523,7 @@ Voice.process = function(v, currentTick)
 				local y = D % 0x10
 				v.currPanning = y / 0x10
 			elseif x == 0xA then
-				-- Stereo Control (signed)
+				-- Stereo Control (signed) - ST3's help screen says this is "old".
 				local y = D % 0x10
 				y = y > 7 and y - 16 or y
 				v.currPanning = (8 + y) / 0xF
@@ -546,6 +549,8 @@ Voice.process = function(v, currentTick)
 				--    with very specific settings.
 				-- C. Implement it differently, e.g. looping will be reversed
 				-- To be honest, it really is the best solution to just not.
+				-- Though Scream Tracker V3.21 does state that SFx does stand
+				--    for FunkRepeat, with x = speed.
 			end
 		elseif C == 'U' then
 			-- Fine Vibrato
@@ -1049,6 +1054,9 @@ routine.process = function()
 						-- Set Filter
 						-- TODO: This must have been global... right?
 						--       Also, OALS has filter objects, so possible.
+						--       Interestingly, ST3.21's help screen says that
+						--       this had 3 settings: 1/0/F : on/off/forced.
+						--       Find out what forced meant.
 				elseif string.char(cell.effectCommand + 0x40) == 'S' and
 					math.floor(cell.effectData/16) == 0xB then
 						-- Pattern Loop
