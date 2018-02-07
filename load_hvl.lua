@@ -48,6 +48,7 @@
 
 local util = require('util')
 local log = require('log')
+local bit = require('bit')
 
 -- Used here for debug purposes.
 local noteToString
@@ -120,6 +121,8 @@ local validTrackCommands = {
 	[ 0xE ] = true,    -- 0xC0 - 0xCF / 0xD1 - 0xDF
 	[ 0xF ] = true,    -- 0x00 - 0xFF
 }
+
+local Wavelength = {[0] = 0x04, 0x08, 0x10, 0x20, 0x40, 0x80}
 
 local load_hvl = function(file)
 	log("--  Abyss' Highest Experience AHX / Hively Tracker HVL loader  --\n\n")
@@ -377,12 +380,12 @@ local load_hvl = function(file)
 
 		v, n = file:read(1); if n ~= 1 then return false, errorString[22] end
 		ins.masterVolume = string.byte(v)
-		log('\tMaster Volume: %02X\n', ins.masterVolume)
+		log('\tMaster Volume: %02d\n', ins.masterVolume)
 
 		v, n = file:read(1); if n ~= 1 then return false, errorString[22] end
 		ins.filterModulationSpeed = math.floor(string.byte(v) / 0x8)
 		ins.wavelength = string.byte(v) % 0x8
-		log('\tWavelength: %02X\n', ins.wavelength)
+		log('\tWavelength: %02X\n', Wavelength[ins.wavelength])
 
 		-- ADSR
 		v, n = file:read(1); if n ~= 1 then return false, errorString[22] end
@@ -403,7 +406,7 @@ local load_hvl = function(file)
 		v, n = file:read(1); if n ~= 1 then return false, errorString[22] end
 		ins.releaseVolume = string.byte(v)
 
-		log('\tADSR Envelope data: %02X %02X | %02X %02X | %02X | %02X %02X\n',
+		log('\tADSR Envelope data: %02X %02d | %02X %02d | %02X | %02X %02d\n',
 			ins.attackLength, ins.attackVolume,
 			ins.decayLength, ins.decayVolume,
 			ins.sustainVolume,
@@ -421,11 +424,11 @@ local load_hvl = function(file)
 		ins.filterModulationSpeed      = ins.filterModulationSpeed + 0x10 *
 		                                 math.floor(string.byte(v) / 0x80) 
 		ins.filterModulationLowerLimit = string.byte(v) % 0x80
-		log('\tFilter mod lo limit: %02X\n', ins.filterModulationLowerLimit)
+		log('\tFilter mod lo limit: %02X\n', ins.filterModulationLowerLimit + 1)
 
 		v, n = file:read(1); if n ~= 1 then return false, errorString[22] end
 		ins.vibratoDelay = string.byte(v)
-		log('\tVibrato delay: %02X\n', ins.vibratoDelay)
+		log('\tVibrato delay: %03d\n', ins.vibratoDelay)
 
 		v, n = file:read(1); if n ~= 1 then return false, errorString[22] end
 		ins.releaseCut   = (math.floor(string.byte(v) / 0x80)) == 1
@@ -448,13 +451,13 @@ local load_hvl = function(file)
 
 		v, n = file:read(1); if n ~= 1 then return false, errorString[22] end
 		ins.squareModulationSpeed = string.byte(v)
-		log('\tSquare mod speed: %02X\n', ins.squareModulationSpeed)
+		log('\tSquare mod speed: %03d\n', ins.squareModulationSpeed)
 
 		v, n = file:read(1); if n ~= 1 then return false, errorString[22] end
 		ins.filterModulationSpeed      = ins.filterModulationSpeed + 0x20 *
 		                                 math.floor(string.byte(v) / 0x80)
 		ins.filterModulationUpperLimit = string.byte(v) % 0x80
-		log('\tFilter mod hi limit: %02X\n', ins.filterModulationUpperLimit)
+		log('\tFilter mod hi limit: %02X\n', ins.filterModulationUpperLimit + 1)
 		log('\tFilter mod speed: %02X\n', ins.filterModulationSpeed)
 
 		v, n = file:read(1); if n ~= 1 then return false, errorString[22] end
@@ -486,13 +489,20 @@ local load_hvl = function(file)
 			v,n = file:read(1); if n ~= 1 then return false,errorString[23] end
 			entry.data1 = string.byte(v)
 
+			-- Command 6 is actually C, 7 is F, although since it's represented
+			-- as 3 bits, it stays.
+
 			log('%03d|%3s%1s|%1d|%1X%02X|%1X%02X\n',
-				j,
+				j-1,
 				noteToString(entry.note),
 				(entry.fixedNote and '*' or ' '),
 				entry.waveform,
-				entry.command0, entry.data0,
-				entry.command1, entry.data1)
+				entry.command0 == 6 and 0xC or (entry.command0 == 7 and 0xF
+					or entry.command0),
+				entry.data0,
+				entry.command1 == 6 and 0xC or (entry.command1 == 7 and 0xF
+					or entry.command1),
+				entry.data1)
 
 			ins.playlistEntry[j] = entry
 		end
