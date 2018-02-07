@@ -10,6 +10,8 @@
 --       THX library (even though IDA gives back a pretty clean disassembly),
 --       the playroutine will instead be based sorely on Hively Tracker code,
 --       which, judging from the function names, came from the same angle. :3
+--       Also, kometbomb's klystrack's AHX importer may have also been used
+--       as a source.
 
 -- Note: As seen by the below comments, some variables are 1-based, while other
 --       ones are 0-based... errors galore if one's not careful. Thanks, Dex.
