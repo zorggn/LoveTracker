@@ -57,8 +57,9 @@ do
 		if note == 0 then
 			return '---'
 		elseif note <=60 then
-			local oct = math.floor(note / 12) + 1
-			local ptc = (note - 1) % 12
+			local n = note - 1
+			local oct = math.floor(n / 12) + 1
+			local ptc = n % 12
 			return ('%2s%1s'):format(N[ptc+1], oct)
 		end
 		return '!!!'
