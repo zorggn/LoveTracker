@@ -1678,16 +1678,16 @@ routine.draw = function()
 	love.graphics.push()
 	love.graphics.translate(74*8, 0)
 	love.graphics.setColor(0,0,0.25)
-	love.graphics.rectangle('fill',0,0,118*8,(module.channelCount+1)*12)
+	love.graphics.rectangle('fill',0,0,122*8,(module.channelCount+1)*12)
 	love.graphics.setColor(1,1,1)
 	love.graphics.translate(0,-2)
 	love.graphics.print(
-		"Ch | Nx Ix Vx Cx Dx | nPer gPer iPer cOfs smpL smpS smpE Cspd T L H S | cI cV cP | FX Fg Fp Fv | Loop DCA T+- ~V# ~T#",
+		"Ch | Nx Ix Vx Cx Dx | nPer gPer iPer cOfs smpL smpS smpE C4-speed T L H S | cI cV cP | FX Fg Fp Fv | Loop DCA T+- ~V# ~T#",
 		0, 0)
 	for ch = 0, module.channelCount-1 do
 		love.graphics.print((
 			"%02X | %02X %02X %02X %02X %02X | "..
-			"%04X %04X %04X %04X %04X %04X %04X %04X %1X %1X %1X %1X | "..
+			"%04X %04X %04X %04X %04X %04X %04X %08X %1X %1X %1X %1X | "..
 			"%02X %02X %02X | %02X %02X %02X %02X | "..
 			"%02X %1X %1X%1X%1X %1X%1X%1X %1X%02X %1X%02X"
 			):format(ch, voice[ch]:getStatistics()), 0, (ch+1)*12)
