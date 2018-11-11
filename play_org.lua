@@ -44,6 +44,14 @@ local DRUMKIT = {
 	      "TOM02.raw"
 } -- Org-02 compatible only, for now.
 
+-- Yoinked from Cucky's C++ implementation
+local FREQTABLE = {
+   261.62556530060, 277.18263097687, 293.66476791741,
+   311.12698372208, 329.62755691287, 349.22823143300,
+   369.99442271163, 391.99543598175, 415.30469757995,
+   440.00000000000, 466.16376151809, 493.88330125612,
+}
+
 local SMPINCREMENT  = {   1,  1,  2,  4, 8,16,32,64}
 local SMPMULTIPLIER = {   4,  2,  2,  2, 2, 2, 2, 2}
 local PERIODSIZE    = {1024,512,256,128,64,32,16, 8}
@@ -62,7 +70,17 @@ local pitchClass    = {
 	63232, -- B
 }
 
-local VOLCURVE = function(v) return 10^(v-1) end
+-- Replace pitch class data from rnhart.net's approximations with calculated values gotten by rev.-engineering:
+for i=1,12 do pitchClass[i] = FREQTABLE[i] * 128 end -- 440.0 * 128 = 56320 exactly.
+
+-- More correct Volume function
+local VOLMIN   = 0.204
+--local VOLCURVE = function(v) return VOLMIN + ((v) * (1.0 - VOLMIN)) end
+-- The old guessed Volume function
+--local VOLCURVE = function(v) return 10^(v-1) end
+-- A combined Volume function; [0.100,1.000] -> [100,1000] -> [0,900] -> [0,796] -> [204,1000] -> [0.204,1.000]
+-- This one keeps the curve assumed by rnhart.net, but starts at the correct minimum volume, and ends at 1.0 max.
+local VOLCURVE = function(v) return ((10^(v-1)-0.1)*(796/900))+VOLMIN end
 local PANLAW   = function(p)
 	local l = (p >= 0.0 and p <= 0.5) and 1.0 or 20.0^(1.0-2.0*p)
 	local r = (p >= 0.5 and p <= 1.0) and 1.0 or 20.0^(2.0*p-1.0)
@@ -174,6 +192,13 @@ Voice.render = function(v)
 			v.currentOffset = math.huge
 			v.ticksLeft = 0 -- drums are one-shot.
 		end
+	end
+
+	-- Test fake overlap sound (simulated round-robin tail ends)
+	-- This makes consecutive notes sound like in OrgMaker 2,
+	-- but it is literally unimplemented in everything else.
+	if v.type == 'melodic' then
+		smp = (v.ticksLeft == v.length) and smp * 1.2 or smp
 	end
 
 	-- Adjust volume and panning
