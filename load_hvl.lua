@@ -105,23 +105,35 @@ local acceptedID = {
 	['HVL\0'] = 2,
 }
 
+-- Note: The instrument playlist commands are different!
 local validTrackCommands = {
-	[ 0x0 ] = true,    -- 0x00 - 0x09
-	[ 0x1 ] = true,    -- 0x00 - 0xFF
-	[ 0x2 ] = true,    -- 0x00 - 0xFF
-	[ 0x3 ] = true,    -- 0x00 - 0xFF
-	[ 0x4 ] = true,    -- 0x01 - 0x3F / 0x41 - 0x7F
-	[ 0x5 ] = true,    -- 0x00 - 0xFF
+	[ 0x0 ] = true,    -- Hi Position Jump  0x00 - 0x09
+	[ 0x1 ] = true,    -- Porta Up          0x00 - 0xFF
+	[ 0x2 ] = true,    -- Porta Down        0x00 - 0xFF
+	[ 0x3 ] = true,    --                   0x00 - 0xFF
+	[ 0x4 ] = true,    -- Set Filter        0x01 - 0x3F / 0x41 - 0x7F
+	[ 0x5 ] = true,    --                   0x00 - 0xFF
 	-- 0x6 doesn't exist.
 	-- 0x7 doesn't exist.
-	[ 0x8 ] = true,    -- 0x00 - 0xFF
+	[ 0x8 ] = true,    --                   0x00 - 0xFF
 	[ 0x9 ] = true,    -- 0x00 - 0x3F
-	[ 0xA ] = true,    -- 0x00 - 0xFF
-	[ 0xB ] = true,    -- (BCD value)
-	[ 0xC ] = true,    -- 0x00 - 0x40 / 0x50 - 0x90 / 0xA0 - 0xE0
-	[ 0xD ] = true,    -- (BCD value)
-	[ 0xE ] = true,    -- 0xC0 - 0xCF / 0xD1 - 0xDF
-	[ 0xF ] = true,    -- 0x00 - 0xFF
+	[ 0xA ] = true,    --                   0x00 - 0xFF
+	[ 0xB ] = true,    -- Position Jump     (2x BCD value)
+	[ 0xC ] = true,    -- Set Volume.       0x00 - 0x40 / 0x50 - 0x90 / 0xA0 - 0xE0
+	[ 0xD ] = true,    -- Row Break         (2x BCD value)
+	[ 0xE ] = true,    --                   0xC0 - 0xCF / 0xD1 - 0xDF
+	[ 0xF ] = true,    -- Set Speed         0x00 - 0xFF
+}
+
+local validMacroCommands = {
+	[ 0x0 ] = true,    -- Init Filter (nil) 0x00 - 0x3F (0x00 only in AHX0)
+	[ 0x1 ] = true,    -- Porta Up          0x00 - 0xFF
+	[ 0x2 ] = true,    -- Porta Down        0x00 - 0xFF
+	[ 0x3 ] = true,    -- Init Square       0x00 - 0x3F
+	[ 0x4 ] = true,    -- Toggle Modulation 0x00,01;0F,10,11;1F;F0,F1,FF (0x00 only in AHX0)
+	[ 0x5 ] = true,    -- Position Jump     0x00 - (Macro length - 1)
+	[ 0x6 ] = true,    -- Set Volume (C)    0x00 - 0x40 / 0x50 - 0x90 / 0xA0 - 0xE0
+	[ 0x7 ] = true,    -- Set Speed (F)     0x00 - 0xFF
 }
 
 local Wavelength = {[0] = 0x04, 0x08, 0x10, 0x20, 0x40, 0x80}
@@ -198,7 +210,7 @@ local load_hvl = function(file)
 	if structure.instrumentCount > 63 then
 		return false, errorString[4]
 	end
-	log("Instrument count: %d/64\n", structure.instrumentCount+1)
+	log("Instrument count: %d/64\n", structure.instrumentCount)
 
 	v, n = file:read(1); if n ~= 1 then return false, errorString[1] end
 	structure.subSongCount = string.byte(v)
@@ -251,6 +263,7 @@ local load_hvl = function(file)
 			v = string.byte(v)
 			-- The specs say that this value is signed [-0x80,0x7F], but
 			-- AHX v2.3d-sp3 displays them as unsigned hex bytes...
+			-- Shouldn't matter too much, since it's a visualization issue.
 			ord[j].transpose = v -- - 0x80
 		end
 		structure.order[i] = ord
@@ -441,15 +454,15 @@ local load_hvl = function(file)
 
 		v, n = file:read(1); if n ~= 1 then return false, errorString[22] end
 		ins.vibratoSpeed = string.byte(v)
-		log('\tVibrato speed: %02X\n', ins.vibratoSpeed)
+		log('\tVibrato speed: %02d\n', ins.vibratoSpeed)
 
 		v, n = file:read(1); if n ~= 1 then return false, errorString[22] end
 		ins.squareModulationLowerLimit = string.byte(v)
-		log('\tSquare mod lo limit: %02X\n', ins.squareModulationLowerLimit)
+		log('\tSquare mod lo limit: %02d\n', ins.squareModulationLowerLimit)
 
 		v, n = file:read(1); if n ~= 1 then return false, errorString[22] end
 		ins.squareModulationUpperLimit = string.byte(v)
-		log('\tSquare mod hi limit: %02X\n', ins.squareModulationUpperLimit)
+		log('\tSquare mod hi limit: %02d\n', ins.squareModulationUpperLimit)
 
 		v, n = file:read(1); if n ~= 1 then return false, errorString[22] end
 		ins.squareModulationSpeed = string.byte(v)
@@ -524,7 +537,7 @@ local load_hvl = function(file)
 
 	log('Comment list:\n')
 
-	-- TODO: validate chars (0,[32-126],[128-255])
+	-- validate chars (0,[32-126],[128-255])
 	local pattern = '[^%z\32-\126\128-\255]'
 
 	for i = 0, structure.instrumentCount do
