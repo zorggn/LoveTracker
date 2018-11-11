@@ -410,8 +410,11 @@ local load_s3m = function(file)
 			sample.length = util.bin2num(v, 'LE')
 			log("    Length          0x%08X", sample.length)
 			if sample.length > 64000 then
-				sample.length = 64000
-				log(" (truncated to 64k)")
+				-- Virt's V-CF2.S3M has one sample going above 65535 though.
+				-- Maybe just don't truncate?
+				--sample.length = 64000
+				--log(" (truncated to 64k)")
+				log(" (longer than 64k!)")
 			end
 			log("\n")
 			v, n = file:read(4) -- Format only uses first two bytes though.
