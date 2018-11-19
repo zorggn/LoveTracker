@@ -4,13 +4,14 @@
 ![Here would be an image of the interface...](lovetracker.png "s3m interface")
 
 No versions, use the commit history to keep track. :V
+(Will probably do a major rewrite eventually, pushing this from 0.anything to 1.0)
 
 ### Info
 
 - S3M module parsing and playback works.
 - Organya parsing and playback works.
 
-- Needs a 0.11 löve nightly.
+- Needs löve version 11.x
 
 ### Usage
 
@@ -57,3 +58,7 @@ No versions, use the commit history to keep track. :V
 - Implement Org-03 (and Org-01 if specs can be inferred/gathered) playback.
 
 - Eventual support for other modules (or not, time will tell.)
+- Formats i aim to understand and work on:
+
+	- MOD (Started, but oh god is it a flustercluck)
+	- AHX/HVL (Started, but need to understand source before it can be more cleanly implemented)
