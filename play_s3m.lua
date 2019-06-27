@@ -929,9 +929,9 @@ Voice.new = function(ch, pan)
 	v.fxCommand        = 0x00   -- Effect command.
 	v.fxData           = 0x00   -- Effect parameter.
 
-	v.fxSlotGeneric    = 0x00   -- Generic effect parameter slot.
-	v.fxSlotPortamento = 0x00   -- Portamento effect parameter slot. (E/F/G)
-	v.fxSlotVibrato    = 0x00   -- Vibrato effect parameter slot. (H/U)
+	v.fxSlotGeneric    = 0x00   -- Generic effect parameter slot. (D, K*, L, E?, F?, G???, I, J, Q, R, S)
+	v.fxSlotPortamento = 0x00   -- Portamento effect parameter slot. (E?/F?/G???)
+	v.fxSlotVibrato    = 0x00   -- Vibrato effect parameter slot. (H/U/K*)
 
 	-- Faster calculation
 	v.noteDelayTicks   = 0x0    -- Ticks to delay note onsets.
