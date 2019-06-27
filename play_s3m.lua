@@ -71,6 +71,9 @@ local SQUARETABLE = {
 	      255, 255, 255, 255, 255, 255, 255, 255,
 	      255, 255, 255, 255, 255, 255, 255, 255}
 
+
+-- This might not be what scream tracker did, but what it did, did sound random.
+-- Until exact code is shown, this is "close enough".
 local RANDOMTABLE = {}
 	for i = 0, 63 do RANDOMTABLE[i] = love.math.random(0, 255) end
 
@@ -505,7 +508,7 @@ Voice.process = function(v, currentTick)
 		elseif C == 'R' then
 			-- Tremolo
 			if D > 0x00 then
-				v.fxSlotGeneric = D -- TODO: Test if D goes into generic slot...
+				v.fxSlotGeneric = D -- Rxy goes into generic slot.
 			end
 			-- If wavecontrol is retriggering, then reset offset here.
 			if N and v.tremoloWaveform < 4 then
