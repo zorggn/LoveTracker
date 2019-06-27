@@ -9,9 +9,11 @@
 
 
 
---[[ TODO: Check implementation against the following ones:
+--[[ TODO: Check implementation against the following sources:
 	https://source.openmpt.org/svn/openmpt/trunk/OpenMPT/soundlib/Load_s3m.cpp
 	https://github.com/schismtracker/schismtracker/blob/master/fmt/s3m.c#L1013
+	https://wiki.openmpt.org/Development:_Formats/S3M
+	https://wiki.openmpt.org/Development:_Test_Cases/S3M
 --]]
 
 
