@@ -27,7 +27,7 @@
 		killSilentLoops            - boolean
 		amigaNoteLimits            - boolean
 		fastVolSlides              - boolean
-		version                    - string[4]
+		created w/ tracker+version - string[4]
 		sampleFormat               - Signed, Unsigned
 		globalVolume               - 0x00..0x40
 		initialSpeed               - 0x00..0x1F
@@ -121,6 +121,19 @@ local errorString = {
 	--[[F]] "Early end-of-file in sample waveform data blocks.",
 }
 
+-- Probable tracker that created the module.
+local cwtStrings = {
+	--[[1]] "Scream Tracker",
+	--[[2]] "Imago Orpheus",
+	--[[3]] "Impulse Tracker",
+	--[[4]] "Schism Tracker", -- different after v0.50 (12bit delta timestamp)
+	--[[5]] "OpenMPT",
+	--[[6]] "BeRo Tracker", -- Used 4100 previously; can clash w/ schism tstmp.
+	--[[7]] "CreamTracker",
+			false,false,false,false,
+	--[[C]] "Camoto / libgamemusic", -- Only ever CA00.
+}
+
 local load_s3m = function(file)
 	log("--  Scream Tracker 3 S3M loader  --\n\n")
 	local structure = {}
@@ -191,31 +204,33 @@ local load_s3m = function(file)
 
 	v, n = file:read(2); if n ~= 2 then return false, errorString[2] end
 	v = util.bin2flags(v)
+	structure.st2vibrato      = v[1]
+	structure.st2tempo        = v[2]
+	structure.amigaslides     = v[3]
 	structure.killSilentLoops = v[4]
 	structure.amigaNoteLimits = v[5]
+	structure.SBFilterEffects = v[6]
 	structure.fastVolSlides   = v[7]
+	structure.customdata      = v[8]
 	log("Flag   1 - ST2 Vibrato:            %s\n", (v[1]==true and 'Y' or 'N'))
 	log("Flag   2 - ST2 Tempo:              %s\n", (v[2]==true and 'Y' or 'N'))
 	log("Flag   4 - Amiga Slides:           %s\n", (v[3]==true and 'Y' or 'N'))
 	log("Flag   8 - 0-Vol. Optimalizations: %s\n", (v[4]==true and 'Y' or 'N'))
 	log("Flag  16 - Amiga Note Limits:      %s\n", (v[5]==true and 'Y' or 'N'))
-	log("Flag  32 - Enable Filter/SFX:      %s\n", (v[6]==true and 'Y' or 'N'))
+	log("Flag  32 - Enable SB Filter/SFX:   %s\n", (v[6]==true and 'Y' or 'N'))
 	log("Flag  64 - Fast ST 3.00 VolSlides: %s\n", (v[7]==true and 'Y' or 'N'))
 	log("Flag 128 - Custom Data Defined:    %s\n", (v[8]==true and 'Y' or 'N'))
 
+	-- Flags 1,2,4,32 for v3.00 fileformat only, not supported above...
+	-- meaning they should just be zero if the cwt/v field implies otherwise.
+	-- Flag 64 might be an OpenMPT addition?
+
 	v, n = file:read(2); if n ~= 2 then return false, errorString[2] end
 	v = util.bin2num(v, 'LE')
-	log("Created with tracker version %X\n", v)
-	if  v == 0x1300 then
-		structure.version = '3.00'
-		structure.fastVolSlides = true
-	elseif
-		v == 0x1301 then structure.version = '3.01' elseif
-		v == 0x1303 then structure.version = '3.03' elseif
-		v == 0x1310 then structure.version = '3.10' elseif
-		v == 0x1320 then structure.version = '3.20' else
-		                    structure.version = '?.??'
-	end
+	log("Created with tracker/version %X\n", v)
+	local cwt = math.floor(v / 0x1000)
+	local version = v % 0x1000
+	-- Unraveling of this field done later.
 
 	v, n = file:read(2); if n ~= 2 then return false, errorString[2] end
 	v = util.bin2num(v, 'LE')
@@ -259,8 +274,10 @@ local load_s3m = function(file)
 	log("Master volume:  0x%02X\n", structure.masterVolume)
 	log("Output channels: %s\n", (structure.isStereo and 'Stereo' or 'Mono'))
 
-	-- Skip UltraClick removal
-	file:read(1)
+	-- UltraClick removal (Used only for tracker detection)
+	v, n = file:read(1); if n ~= 1 then return false, errorString[2] end
+	v = util.bin2num(v)
+	local ucremoval = v
 
 	local initialPanning
 	v, n = file:read(1); if n ~= 1 then return false, errorString[2] end
@@ -271,8 +288,10 @@ local load_s3m = function(file)
 	-- Skip Expansion bytes
 	file:read(8)
 
-	-- Skip Special pointer
-	file:read(2)
+	-- Special pointer (Used only for tracker detection)
+	v, n = file:read(2); if n ~= 2 then return false, errorString[2] end
+	v = util.bin2num(v, 'LE')
+	local specptr = v
 
 	--[[Channel structure]]--
 
@@ -413,7 +432,7 @@ local load_s3m = function(file)
 			log("    Length          0x%08X", sample.length)
 			if sample.length > 64000 then
 				-- Virt's V-CF2.S3M has one sample going above 65535 though.
-				-- Maybe just don't truncate?
+				-- Maybe just don't truncate? Specs say we should though...
 				--sample.length = 64000
 				--log(" (truncated to 64k)")
 				log(" (longer than 64k!)")
@@ -630,6 +649,8 @@ local load_s3m = function(file)
 
 	--[[Patterns]]--
 
+	-- There's a bug here with having disabled channels before enabled ones makes the enabled ones be empty...
+
 	local noteTf = function(n)
 		local symbol = {[0] = '-','#','-','#','-','-','#','-','#','-','#','-'}
 		local letter = {[0] = 'C', 'C', 'D', 'D', 'E', 'F', 'F', 'G', 'G', 'A',
@@ -719,9 +740,10 @@ are not enough Zxx commands, too "high" Zxx commands or there are only "left"
 or "right" pannings (we assume that stereo should be somewhat balanced), and
 modules not made with an old version of ST3 were probably made in a tracker
 that supports panning anyway. --]]
-							-- Besides, we don't support OpenMPT additions to
-							-- modules anyway, so Zxx can only be PixPlay
-							-- 16-valued panning, and not MIDI macros or stuff.
+							-- That said, this doesn't support most OpenMPT
+							-- specific additions to modules anyway, so Zxx can
+							-- only be PixPlay 16-valued panning, and not
+							-- MIDI macros.
 							if cell.effectCommand == 26 and
 								cell.effectData < 0x10 then
 									isPixPlay = true
@@ -783,16 +805,22 @@ that supports panning anyway. --]]
 					return false, errorString[15]
 				end
 				for smp = 0, structure.sample[wfm].length-1 do
-					local ofs = smp * z
-					if structure.sampleFormat == 'Signed' then
-						local x = util.bin2num(v:sub(ofs+1, ofs+1+(z-1)), 'LE')
-						x = x >= ((2^(8*z))/2) and -((2^(8*z))-x) or x
-						structure.sample[wfm].data:setSample(smp, (x/128))
-					elseif structure.sampleFormat == 'Unsigned' then
-						local x = util.bin2num(v:sub(ofs+1, ofs+1+(z-1)), 'LE')
-						structure.sample[wfm].data:setSample(smp,
-							(x-((2^(8*z))/2))/(2^(8*z))
-						)
+					if structure.sample[wfm].packingScheme == 0 then
+						local ofs = smp * z
+						if structure.sampleFormat == 'Signed' then
+							local x = util.bin2num(v:sub(ofs+1, ofs+1+(z-1)),
+								'LE')
+							x = x >= ((2^(8*z))/2) and -((2^(8*z))-x) or x
+							structure.sample[wfm].data:setSample(smp, (x/128))
+						elseif structure.sampleFormat == 'Unsigned' then
+							local x = util.bin2num(v:sub(ofs+1, ofs+1+(z-1)),
+								'LE')
+							structure.sample[wfm].data:setSample(smp,
+								(x-((2^(8*z))/2))/(2^(8*z))
+							)
+						end
+					else --if structure.sample[wfm].packingScheme == 1 then
+						-- TODO: Figure out the specific DP30ADPCM format.
 					end
 				end
 				log("Loaded.\n")
@@ -804,12 +832,96 @@ that supports panning anyway. --]]
 
 	--[[Finalization]]--
 
-	if isPixPlay then
-		structure.moduleType = ("PixPlay (CRAWLING.S3M)")
+	-- Build moduletype string
+	local cwtinfo = {}
+
+	if cwtStrings[cwt] then
+		if cwt == 0xC then
+			table.insert(cwtinfo, cwtStrings[cwt])
+			table.insert(cwtinfo, "")
+		elseif cwt == 0x4 then
+			if version <  0x020 then
+				-- Proper Schism version
+				table.insert(cwtinfo, cwtStrings[cwt])
+			elseif version == 0x020 then
+				table.insert(cwtinfo, cwtStrings[cwt])
+				table.insert(cwtinfo, " v0.2a+ (2005-2007)")
+			elseif version == 0x050 then
+				table.insert(cwtinfo, cwtStrings[cwt])
+				table.insert(cwtinfo, " v?.?? (2007-2009)")
+			elseif version == 0x100 then
+				-- 4100 can be BeRoTracker circa 2004-2012
+				table.insert(cwtinfo, "BeRoTracker")
+				table.insert(cwtinfo, " v1.00 (2004-2012)")
+			elseif version >= 0x050 then
+				-- SchismTracker timestamps
+				table.insert(cwtinfo, cwtStrings[cwt])
+				local epoch = os.time{year=2009, month=10, day=31}
+				local ts = os.date("%Y.%m.%d", epoch + (version - 0x050)*86400)
+				if version == 0xfff then
+					table.insert(cwtinfo, "Timestamp: 2020.10.27+")
+				else
+					table.insert(cwtinfo, "Timestamp: " .. ts)
+				end
+			end
+		elseif cwt == 0x1 then
+			if version == 0x300 then
+				structure.fastVolSlides = true
+				table.insert(cwtinfo, cwtStrings[cwt])
+			elseif version == 0x320 and
+				--specptr == 0x0 and
+				initialPanning and ucremoval == 0 and
+				structure.orderCount % 16 == 0 and
+				not structure.st2vibrato and
+				not structure.st2tempo and
+				not structure.amigaslides and
+				not structure.killSilentLoops and
+				not structure.SBFilterEffects and
+				not structure.customdata
+			then
+				table.insert(cwtinfo, "ModPlug Tracker")
+				table.insert(cwtinfo, "")
+			elseif version == 0x320 and
+				--specptr == 0x0 and
+				not initialPanning and ucremoval == 0 and
+				not structure.st2vibrato and
+				not structure.st2tempo and
+				not structure.amigaslides and
+				not structure.killSilentLoops and
+				not structure.amigaNoteLimits and
+				not structure.SBFilterEffects and
+				not structure.fastVolSlides and
+				not structure.customdata
+			then
+				table.insert(cwtinfo, "Velvet Studio")
+				table.insert(cwtinfo, "")
+			elseif not (ucremoval == 8 or ucremoval == 12 or
+				ucremoval == 16 or ucremoval == 24)
+			then
+				table.insert(cwtinfo, "Other ST320 compatible Tracker")
+				table.insert(cwtinfo, "")
+			end
+		else
+			table.insert(cwtinfo, cwtStrings[cwt])
+		end
 	else
-		structure.moduleType = ("Scream Tracker 3 v%s"):format(
-			structure.version)
+		table.insert(cwtinfo, "Unknown Tracker")
 	end
+
+	if #cwtinfo == 1 then
+		-- Generic version number
+		table.insert(cwtinfo, " v" .. math.floor(version / 0x100) ..
+			"." .. version % 0x100)
+	end
+
+	if isPixPlay then
+		cwtinfo[1] = "PixPlay (CRAWLING.S3M)"
+		cwtinfo[2] = ""
+	end
+	
+	structure.moduleType = ("Scream Tracker 3 module" ..
+			"(Created with %s)"):format(table.concat(cwtinfo))
+
 	structure.fileType = 's3m'
 
 	log("-- /Scream Tracker 3 S3M loader/ --\n\n")
