@@ -847,7 +847,7 @@ Voice.render = function(v)
 			end
 		else
 			if v.currOffset > v.instrument.data:getSampleCount() *
-				v.instrument.data:getChannels()
+				v.instrument.data:getChannelCount()
 			then
 				v.currOffset = 0.0
 				v.instPeriod = 0 -- Only play the sample once.
@@ -856,7 +856,7 @@ Voice.render = function(v)
 		end
 
 		v.currOffset = v.currOffset % (v.instrument.data:getSampleCount() *
-			v.instrument.data:getChannels())
+			v.instrument.data:getChannelCount())
 
 		-- Interpolation
 		if interpolation == 'nearest' then
@@ -1257,7 +1257,7 @@ routine.render = function(dt)
 		-- Advance buffer position, if it's full, queue it and reset buffer.
 		buffer.offset = buffer.offset + 2
 		if buffer.offset >= buffer.data:getSampleCount() *
-			buffer.data:getChannels()
+			buffer.data:getChannelCount()
 		then
 			buffer.offset = 0
 			source.queue:queue(buffer.data)
