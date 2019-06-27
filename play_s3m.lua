@@ -410,7 +410,7 @@ Voice.process = function(v, currentTick)
 				-- Extra fine porta
 				v.instPeriod = v.instPeriod + y
 			end
-			v.instPeriod = math.min(v.instPeriod, 27392)
+			--v.instPeriod = math.min(v.instPeriod, 27392)
 		elseif C == 'F' then
 			-- Portamento Up
 			if D > 0x00 then
@@ -602,7 +602,7 @@ Voice.process = function(v, currentTick)
 			if x < 0xE then
 				v.instPeriod = v.instPeriod + v.fxSlotPortamento * 4
 			end
-			v.instPeriod = math.min(v.instPeriod, 27392)
+			--v.instPeriod = math.min(v.instPeriod, 27392)
 		elseif C == 'F' then
 			-- Portamento Up
 			local x = math.floor(v.fxSlotPortamento / 0x10)
