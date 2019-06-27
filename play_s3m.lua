@@ -1130,7 +1130,7 @@ routine.step = function()
 				currentOrder   = 0 -- No song restart marker in s3m.
 				currentPattern = module.order[currentOrder]
 			end
-			-- Invalidate loop points if we leave a pattern
+			-- Invalidate loop points if we leave a pattern in any way!
 			for ch = 0, module.channelCount-1 do
 				loopRow[ch] = 0
 				loopCnt[ch] = 0 
@@ -1177,6 +1177,11 @@ routine.step = function()
 			end
 			positionJump, patternBreak = false, false
 		end
+		-- Invalidate loop points if we leave a pattern in any way!
+			for ch = 0, module.channelCount-1 do
+				loopRow[ch] = 0
+				loopCnt[ch] = 0 
+			end
 	end
 	-- Marker/Empty pattern skips
 	if currentPattern >= 254 then
