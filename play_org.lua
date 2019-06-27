@@ -124,12 +124,12 @@ end
 Voice.setLength = function(v, len)
 	-- Don't process continuations if the previous note wasn't as long...
 	if v.pitch == 0xFF then return end
-		v.length = len
-		if v.pizzicato == 0 then
-			v.ticksLeft = len+1 -- ticks
-		else
-			v.ticksLeft = PIZZICATO(v.octave) -- samplepoints
-		end
+	v.length = len
+	if v.pizzicato == 0 then
+		v.ticksLeft = len+1 -- ticks
+	else
+		v.ticksLeft = PIZZICATO(v.octave) -- samplepoints
+	end
 end
 
 Voice.setVolume = function(v, vol)
