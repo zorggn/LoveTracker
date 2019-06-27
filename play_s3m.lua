@@ -369,6 +369,13 @@ Voice.process = function(v, currentTick)
 	end
 
 	if currentTick == 0 then
+		-- Hack: If C is @ it means only the data has been saved and that
+		--       there's no effect.
+		if C == '@' then
+			if D ~= 0x00 then
+				v.fxSlotGeneric = D
+			end
+		end
 		-- T0 Effects.
 		if     C == 'D' then
 			-- Volume SLide
