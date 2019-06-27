@@ -435,7 +435,7 @@ Voice.process = function(v, currentTick)
 			if D > 0x00 then
 				v.fxSlotPortamento = D
 			end
-			if N and v.instrument then
+			if N and v.instrument and v.instrument.c4speed then
 				v.glisPeriod = NOTEPERIOD[N] *
 					(DEFAULTC4SPEED / v.instrument.c4speed)
 			end
