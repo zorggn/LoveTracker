@@ -826,7 +826,7 @@ Voice.render = function(v)
 		end
 
 		-- Vibrato
-		if v.c == 0x08 then
+		if v.c == 0x08 or v.c == 0x0B or v.c == 0x16 then
 			freq = v.instPeriod + v.vibratoFreqDelta
 		else
 			freq = v.instPeriod
