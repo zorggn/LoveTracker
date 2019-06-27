@@ -3,6 +3,21 @@
 
 -- TODO: Scream Tracker mentions a Xxx command that mapped to an amiga 8xx command, that's not used...
 
+-- OpenMPT S3M Test battery:
+----------------------------
+-- Amiga Limits   - Fail
+-- Freq Limits    - Pass
+-- Loop Reset     - Pass
+-- NOP            - Fail
+-- OxxMem         - Fail
+-- ParamMem       - Fail
+-- PatternDelay   - Fail?
+-- PeriodLimit    - Fail
+-- PortaAfterArp  - Fail
+-- PortaSmpChange - Fail
+-- VibratoTypeCh  - Pass
+-- Weirdloop      - Fail, spectacularly at that.
+
 -- Note: To keep things compact, everything not generic enough to be used by
 --       other playroutines are kept inside the respective play_*.lua files,
 --       a.k.a. these ones.
