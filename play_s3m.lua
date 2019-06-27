@@ -472,13 +472,32 @@ Voice.process = function(v, currentTick)
 				v.tremorOnTicks  = math.floor(v.fxSlotGeneric / 0x10)
 				v.tremorOffTicks =            v.fxSlotGeneric % 0x10
 			end
-			local x, y = v.tremorOnTicks+1, v.tremorOffTicks+1
+			-- The actual function
+			-- OpenMPT implements this with both x0 and x1 and 0y and 1y being counted as on/off for 1 tick (except 00),
+			-- But FireLight claims it's x+1, y+1 all the way (except 00)...
+			-- TEST THIS MORE! (Also whether the internal counter gets reset at anytime or not... row/pat/song)
+
+			--local x, y = v.tremorOnTicks+1, v.tremorOffTicks+1
+			local x, y = v.tremorOnTicks, v.tremorOffTicks
+			if x == 0 and y == 0 then
+				-- Use previous values (S3M "bug" if this wasn't here and we set 00 to 11.)
+			else
+				-- Adjust values
+				x = v.tremorOnTicks  == 0 and v.tremorOnTicks  + 1 or v.tremorOnTicks
+				y = v.tremorOffTicks == 0 and v.tremorOffTicks + 1 or v.tremorOffTicks
+			end
+
 			v.tremorOffset = v.tremorOffset % (x + y) -- sum is 32 maximum
-			if v.tremorOffset < x then
+
+			if v.tremorOffset >= x then
+				print('T0 off ' .. v.tremorOffset)
 				v.currVolume = 0
 			else
-				v.currVolume = V
+				print('T0 on  ' .. v.tremorOffset)
+				v.currVolume = (V and V or v.instrument.volume) / 0x40
 			end
+
+			v.tremorOffset = v.tremorOffset + 1
 		elseif C == 'J' then
 			-- Arpeggio
 			if D > 0x00 then
@@ -668,13 +687,31 @@ Voice.process = function(v, currentTick)
 			v.vibratoOffset = (v.vibratoOffset + speed) % 64
 		elseif C == 'I' then
 			-- Tremor
-			local x, y = v.tremorOnTicks+1, v.tremorOffTicks+1
+			-- The actual function
+
+			-- OpenMPT implements this with both x0 and x1 and 0y and 1y being counted as on/off for 1 tick (except 00),
+			-- But FireLight claims it's x+1, y+1 all the way (except 00)...
+			--local x, y = v.tremorOnTicks+1, v.tremorOffTicks+1
+			local x, y = v.tremorOnTicks, v.tremorOffTicks
+			if x == 0 and y == 0 then
+				-- Use previous values (S3M "bug" if this wasn't here and we set 00 to 11.)
+			else
+				-- Adjust values
+				x = v.tremorOnTicks  == 0 and v.tremorOnTicks  + 1 or v.tremorOnTicks
+				y = v.tremorOffTicks == 0 and v.tremorOffTicks + 1 or v.tremorOffTicks
+			end
+
 			v.tremorOffset = v.tremorOffset % (x + y) -- sum is 32 maximum
-			if v.tremorOffset < x then
+
+			if v.tremorOffset >= x then
+				print('Tn off ' .. v.tremorOffset)
 				v.currVolume = 0
 			else
-				v.currVolume = V
+				print('Tn on  ' .. v.tremorOffset)
+				v.currVolume = (V and V or v.instrument.volume) / 0x40
 			end
+
+			v.tremorOffset = v.tremorOffset + 1
 		elseif C == 'J' then
 			-- Arpeggio
 			-- The below code is how the effect would work if ST3/S3M didn't
