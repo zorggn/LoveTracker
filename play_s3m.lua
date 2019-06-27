@@ -217,8 +217,18 @@ Voice.setPeriod = function(v, pitch)
 		return
 	end
 	v.notePeriod = NOTEPERIOD[pitch]
+	-- If amiga limits are forced, apply upper limits on base period as well,
+	-- not just the computed one.
+	if module.amigaNoteLimits then
+		v.notePeriod = math.max(v.notePeriod, 56) -- B-5
+	end
+
 	if v.instrument and v.instrument.c4speed then
 		v.instPeriod = v.notePeriod * (DEFAULTC4SPEED / v.instrument.c4speed)
+		-- Also enforce amiga limits on the computed period.
+		if module.amigaNoteLimits then
+			v.instPeriod = math.max(v.instPeriod, 56) -- B-5
+		end
 		v.tempPeriod = v.instPeriod -- Needed for semitone glissando.
 	end
 end
@@ -414,6 +424,10 @@ Voice.process = function(v, currentTick)
 			elseif x == 0xE then
 				-- Extra fine porta
 				v.instPeriod = v.instPeriod - y
+			end
+			-- Amiga limits
+			if module.amigaNoteLimits then
+				v.instPeriod = math.max(v.instPeriod, 56)
 			end
 			v.instPeriod = math.max(v.instPeriod, 0)
 		elseif C == 'G' then
